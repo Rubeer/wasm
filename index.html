@@ -1,0 +1,31 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+
+<script type="module">
+
+    async function init()
+    {
+        let utf8dec = new TextDecoder("utf-8");
+
+        let Imports = {};
+        Imports['memory'] = new WebAssembly['Memory']({'initial':32});
+        let Memory = new Uint8Array(Imports['memory']['buffer']);
+
+        Imports['JSLog'] = function(Pointer, Length)
+        {
+            let data = Memory.subarray(Pointer, Pointer+Length);
+            console.log("main.wasm: " + utf8dec.decode(data));
+        }
+
+        const { instance } = await WebAssembly.instantiateStreaming(fetch("main.wasm"), {"env":Imports});
+
+        instance.exports.Test();
+    }
+    init();
+</script>
+
+</html>
