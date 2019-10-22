@@ -2,7 +2,7 @@
 #!/bin/bash
 
 # Set DIR to the directory this script is located at.
-# This insures that this script will work when ran from a different working directory.
+# This ensures that this script will work when ran from a different working directory.
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 mkdir -p $DIR/bin
