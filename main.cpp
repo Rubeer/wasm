@@ -5,11 +5,12 @@
 
 js_export void Test()
 {
+    char Buf[64]; string Dest = WrapBuf(Buf);
+
     for(u32 i = 0; i < 2; ++i)
     {
-        string String = S("dfghkjghsdf");
-        Printf("s: %u %u", String.Size, (u32)String.Contents);
-        Printf("Hello there. %S", String);
+        string Num = FormatText(Dest, "%u", i);
+        Printf("Test: %x, %S", 0xA1B2C3, &Num);
     }
 }
 

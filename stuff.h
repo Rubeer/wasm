@@ -16,7 +16,8 @@ struct buffer
 };
 typedef buffer string;
 
-#define S(s) string{ sizeof(s) - 1, s }
+#define S(s) string{sizeof(s)-1,s}
+#define WrapBuf(b) buffer{sizeof(b),b}
 
 // NOTE(robin): C++ calls JS
 #define js_import extern "C" 
@@ -24,7 +25,13 @@ typedef buffer string;
 // NOTE(robin): JS calls C++
 #define js_export extern "C" __attribute__((visibility("default")))
 
+// NOTE(robin): console.log
 js_import void JSLog(void *Data, s32 Size);
+
+void JSLog(string String)
+{
+    JSLog(String.Contents, (s32)String.Size);
+}
 
 template<typename number>
 number Minimum(number A, number B)
@@ -39,26 +46,12 @@ number Maximum(number A, number B)
 
 void MemoryCopy(void *Dest, void *Source, u32 Size)
 {
-    u32 *Dest32 = (u32 *)Dest;
-    u32 *Source32 = (u32 *)Source;
-    while(Size >= 4)
-    {
-        *Dest32++ = *Source32++;
-        Size -= sizeof(u32);
-    }
-
-    u8 *Dest8 = (u8 *)Dest32;
-    u8 *Source8 = (u8 *)Source32;
-    while(Size)
+    u8 *Dest8 = (u8 *)Dest;
+    u8 *Source8 = (u8 *)Source;
+    while(Size--)
     {
         *Dest8++ = *Source8++;
-        Size -= sizeof(u8);
     }
-}
-
-void Log(string String)
-{
-    JSLog(String.Contents, (s32)String.Size);
 }
 
 void Advance(string *String, u32 Count = 1)
@@ -87,26 +80,64 @@ void Mirror(string String)
         ++Start;
     }
 }
-void Printf_(string Format, ...);
-#define Printf(Format, ...) Printf_(S(Format), ## __VA_ARGS__)
 
-string FormatText(string Dest, string Format, va_list Args)
+string U32ToAscii_Dec(string *Dest, u32 Value)
 {
+    string Result = *Dest;
 
-    #define NextChar(Var)               \
-    {                                   \
-        if(!Format.Size) return Written; \
-        Var = Format.Contents[0];       \
-        Advance(&Format);               \
+    do
+    {
+        if(!Dest->Size) break;
+        Dest->Contents[0] = '0' + (Value % 10);
+        Advance(Dest);
+        Value /= 10;
+    }
+    while(Value);
+
+    Result.Size -= Dest->Size;
+    Mirror(Result);
+
+    return Result;
+}
+
+string U32ToAscii_Hex(string *Dest, u32 Value)
+{
+    string Result = *Dest;
+
+    do
+    {
+        if(!Dest->Size) break;
+        Dest->Contents[0] = "0123456789ABCDEF"[Value % 16];
+        Advance(Dest);
+        Value /= 16;
+    }
+    while(Value);
+
+    Result.Size -= Dest->Size;
+    Mirror(Result);
+
+    return Result;
+}
+
+
+string FormatText_(string DestInit, string Format, va_list Args)
+{
+    string Dest = DestInit;
+
+    #define NextChar(Var)           \
+    {                               \
+        if(!Format.Size) return {DestInit.Size - Dest.Size, DestInit.Contents};   \
+        Var = Format.Contents[0];   \
+        Advance(&Format);           \
     }
     
-    #define Put(Var)                                 \
-    {                                                \
-        if(Written.Size >= Dest.Size) return Written;  \
-        Written.Contents[Written.Size++] = Var;        \
+    #define Put(Var)                      \
+    {                                     \
+        if(!Dest.Size) return DestInit;   \
+        Dest.Contents[0] = Var;           \
+        Advance(&Dest);                   \
     }
 
-    string Written = {0, Dest.Contents};
 
     char Char = 0;
     for(;;)
@@ -128,51 +159,45 @@ string FormatText(string Dest, string Format, va_list Args)
 
                 case 'u':
                 {
-                    string Number = {0, Written.Contents + Written.Size};
-
                     u32 Value = va_arg(Args, u32);
-                    do
-                    {
-                        ++Number.Size;
-                        Put('0' + (Value % 10));
-                        Value /= 10;
-                    }
-                    while(Value);
+                    U32ToAscii_Dec(&Dest, Value);
+                } break;
 
-                    Mirror(Number);
-
+                case 'x':
+                {
+                    u32 Value = va_arg(Args, u32);
+                    U32ToAscii_Hex(&Dest, Value);
                 } break;
 
                 case 'S':
                 {
-                    string String = va_arg(Args, string);
-                    Printf("Ptr: %u Size: %u", (u32)String.Contents, String.Size);
-
-                    u32 DestRemaining = Dest.Size - Written.Size;
-                    u32 Count = Minimum(String.Size, DestRemaining);
-                    MemoryCopy(Written.Contents + Written.Size, String.Contents, Count);
-                    Written.Size += Count;
+                    string *String = va_arg(Args, string *);
+                    u32 Count = Minimum(String->Size, Dest.Size);
+                    MemoryCopy(Dest.Contents, String->Contents, Count);
+                    Advance(&Dest, Count);
                 } break;
             }
         }
     }
 
-    return Written;
+    return {DestInit.Size - Dest.Size, DestInit.Contents};
 #undef NextChar
 #undef Put
 }
 
-string FormatText(string Dest, string Format, ...)
+#define FormatText(Dest, Format, ...) FormatText_(Dest, S(Format), ## __VA_ARGS__)
+string FormatText_(string Dest, string Format, ...)
 {
     va_list Args;
 
     va_start(Args, Format);
-    string Result = FormatText(Dest, Format, Args);
+    string Result = FormatText_(Dest, Format, Args);
     va_end(Args);
 
     return Result;
 }
 
+#define Printf(Format, ...) Printf_(S(Format), ## __VA_ARGS__)
 void Printf_(string Format, ...)
 {
     char Buf[128];
@@ -180,9 +205,9 @@ void Printf_(string Format, ...)
 
     va_list Args;
     va_start(Args, Format);
-    string Result = FormatText(Dest, Format, Args);
+    string Result = FormatText_(Dest, Format, Args);
     va_end(Args);
 
-    Log(Result);
+    JSLog(Result);
 }
 
