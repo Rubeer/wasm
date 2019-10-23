@@ -2,25 +2,22 @@
 
 #include "stuff.h"
 
-
-js_export void Test()
+void StackTest(u32 Depth = 0)
 {
-    char Buf[64]; string Dest = WrapBuf(Buf);
-
-    for(u32 i = 0; i < 2; ++i)
-    {
-        string Num = FormatText(Dest, "%u", i);
-        Printf("Test: %x, %S", 0xA1B2C3, &Num);
-    }
+    if((Depth % 8) == 0)
+        Printf("%u %u", Depth, &Depth);
+    StackTest(Depth + 1);
 }
 
-extern "C" s32 Sum(s32 *A, u32 Count)
+js_export void Init(size InitMemorySize)
 {
-    return 0;
+    Printf("Stack: %u", &InitMemorySize);
+    Printf("main.wasm startup");
+
+    static u8 TestMemory[1024*1024];
+    Printf("Mem: %u", TestMemory);
+
+    memory_arena Memory = MemoryArenaFromByteArray(TestMemory);
+    //StackTest();
 }
 
-
-extern "C" int Add(int a, int b)
-{
-    return a+b;
-}

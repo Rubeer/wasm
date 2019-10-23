@@ -9,21 +9,42 @@
 
     async function init()
     {
-        let utf8dec = new TextDecoder("utf-8");
+        let MemoryPageCount = 32;
+        let MemorySize = MemoryPageCount * 65536;
 
         let Imports = {};
-        Imports['memory'] = new WebAssembly['Memory']({'initial':32});
+        Imports['memory'] = new WebAssembly.Memory({'initial':MemoryPageCount});
         let Memory = new Uint8Array(Imports['memory']['buffer']);
 
-        Imports['JSLog'] = function(Pointer, Length)
+        let utf8dec = new TextDecoder("utf-8");
+        function GetWasmString(Length, Pointer)
         {
             let data = Memory.subarray(Pointer, Pointer+Length);
-            console.log("main.wasm: " + utf8dec.decode(data));
+            return utf8dec.decode(data);
         }
 
-        const { instance } = await WebAssembly.instantiateStreaming(fetch("main.wasm"), {"env":Imports});
+        Imports['JSLog'] = function(StringLength, StringPtr)
+        {
+            console.log("main.wasm: " + GetWasmString(StringLength, StringPtr));
+        }
 
-        instance.exports.Test();
+        Imports['JSAbort'] = function(ReasonLength, ReasonPtr,
+                                      FileNameLength, FileNamePtr,
+                                      LineNumber)
+        {
+            let Reason = GetWasmString(ReasonLength, ReasonPtr);
+            let FileName = GetWasmString(FileNameLength, FileNamePtr);
+            let Message = "main.wasm: ABORT: (" + FileName + ":" + LineNumber + ") " + Reason;
+            throw new Error(Message);
+        }
+
+
+        const { instance } = await WebAssembly.instantiateStreaming(
+            fetch("main.wasm"),
+            {"env":Imports}
+        );
+
+        instance.exports.Init(MemorySize);
     }
     init();
 </script>

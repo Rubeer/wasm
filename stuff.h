@@ -1,23 +1,33 @@
 
 #include <stdarg.h>
+#include <stdint.h>
 
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned int u32;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
 
-typedef char s8;
-typedef short s16;
-typedef int s32;
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;
+typedef uint64_t u64;
+
+typedef uintptr_t size;
+
+typedef float f32;
+typedef double f64;
+
 
 struct buffer
 {
-    u32 Size;
+    size Size;
     char *Contents;
 };
 typedef buffer string;
 
 #define S(s) string{sizeof(s)-1,s}
 #define WrapBuf(b) buffer{sizeof(b),b}
+
 
 // NOTE(robin): C++ calls JS
 #define js_import extern "C" 
@@ -26,11 +36,23 @@ typedef buffer string;
 #define js_export extern "C" __attribute__((visibility("default")))
 
 // NOTE(robin): console.log
-js_import void JSLog(void *Data, s32 Size);
+js_import void JSLog(size StringLength, void *StringPtr);
+
+js_import void JSAbort(size ReasonLength, void *ReasonPtr,
+                       size FileNameLength, void *FileNamePtr,
+                       u32 LineNumber);
+
+
+void JSAbort(string Reason, string FileName, u32 LineNumber)
+{
+    JSAbort(Reason.Size, Reason.Contents, FileName.Size, FileName.Contents, LineNumber);
+}
+
+#define Assert(Condition) if(!(Condition)) JSAbort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
 
 void JSLog(string String)
 {
-    JSLog(String.Contents, (s32)String.Size);
+    JSLog(String.Size, String.Contents);
 }
 
 template<typename number>
@@ -44,7 +66,7 @@ number Maximum(number A, number B)
     return A > B ? A : B;
 }
 
-void MemoryCopy(void *Dest, void *Source, u32 Size)
+void MemoryCopy(void *Dest, void *Source, size Size)
 {
     u8 *Dest8 = (u8 *)Dest;
     u8 *Source8 = (u8 *)Source;
@@ -54,7 +76,21 @@ void MemoryCopy(void *Dest, void *Source, u32 Size)
     }
 }
 
-void Advance(string *String, u32 Count = 1)
+void MemorySet(void *Dest, u8 Value, size Size)
+{
+    u8 *Dest8 = (u8 *)Dest;
+	while(Size--)
+	{
+		*Dest8++ = Value;
+	}
+}
+
+bool IsPowerOfTwo(u32 V)
+{
+	return ((V - 1) & V) == 0;
+}
+
+void Advance(string *String, size Count = 1)
 {
     if(String->Size > Count)
     {
@@ -172,7 +208,7 @@ string FormatText_(string DestInit, string Format, va_list Args)
                 case 'S':
                 {
                     string *String = va_arg(Args, string *);
-                    u32 Count = Minimum(String->Size, Dest.Size);
+                    size Count = Minimum(String->Size, Dest.Size);
                     MemoryCopy(Dest.Contents, String->Contents, Count);
                     Advance(&Dest, Count);
                 } break;
@@ -211,3 +247,132 @@ void Printf_(string Format, ...)
     JSLog(Result);
 }
 
+struct memory_arena
+{
+    buffer Buffer;
+    size Used;
+};
+
+enum arena_push_flags
+{
+    ArenaFlag_Default = 0,
+    ArenaFlag_NoClear = (1 << 0),
+};
+
+constexpr size DefaultAlignment = 4;
+
+#define MemoryArenaFromByteArray(Array) memory_arena{buffer{sizeof(Array), (char *)Array}, 0}
+
+#define PushStruct(Memory, Type, ...) ((Type *)PushSize(Memory, sizeof(Type), ## __VA_ARGS__))
+#define PushArray(Memory, Type, Count, ...) ((Type *)PushSize(Memory, (sizeof(Type)*(Count)), ## __VA_ARGS__))
+#define PushInfer(Memory, Pointer, ...) ((decltype(Pointer))PushSize(Memory, sizeof(*(Pointer)), ## __VA_ARGS__))
+void *PushSize(memory_arena *Memory, size RequestedSize, arena_push_flags Flags = ArenaFlag_Default, size Alignment = DefaultAlignment)
+{
+    Assert(IsPowerOfTwo(Alignment));
+
+    size AlignmentOffset = 0;
+    if(Alignment > 1)
+    {
+        size Address = (size)Memory->Buffer.Contents + Memory->Used;
+        AlignmentOffset = Alignment - (Address & (Alignment - 1));
+    }
+
+	size ActualSize = RequestedSize + AlignmentOffset;
+	Assert(Memory->Used + ActualSize <= Memory->Buffer.Size);
+
+    u8 *Result = (u8 *)Memory->Buffer.Contents + Memory->Used + AlignmentOffset;
+    Memory->Used += ActualSize;
+
+
+    if(!(Flags & ArenaFlag_NoClear))
+    {
+        MemorySet(Result, 0, RequestedSize);
+    }
+
+    return (void *)Result;
+}
+
+void Clear(memory_arena *Memory)
+{
+	Memory->Used = 0;
+}
+
+#define BootstrapPushStruct(StructType, ArenaName, ...) (StructType *)BootstrapPushStruct_(sizeof(StructType), offsetof(StructType, ArenaName), ## __VA_ARGS__)
+void *BootstrapPushStruct_(size StructSize, size ArenaOffset, arena_push_flags Flags = ArenaFlag_Default, size Alignment = DefaultAlignment)
+{
+    memory_arena Bootstrap = {};
+    void *Result = PushSize(&Bootstrap, StructSize, Flags, Alignment);
+    MemoryCopy((u8 *)Result + ArenaOffset, &Bootstrap, sizeof(Bootstrap));
+    return Result;
+}
+
+buffer PushBuffer(memory_arena *Memory, size Size, arena_push_flags Flags = ArenaFlag_Default, size Alignment = DefaultAlignment)
+{
+    buffer Result;
+    Result.Size = Size;
+    Result.Contents = (char *)PushSize(Memory, Size, Flags, Alignment);
+    return Result;
+}
+
+void *PushCopy(memory_arena *Memory, size Size, void *Data, size Alignment = DefaultAlignment)
+{
+    void *Result = PushSize(Memory, Size, ArenaFlag_NoClear, Alignment);
+    MemoryCopy(Result, Data, Size);
+    return Result;
+}
+
+buffer PushCopy(memory_arena *Memory, buffer Buffer, size Alignment = DefaultAlignment)
+{
+    buffer Result;
+    Result.Size = Buffer.Size;
+    Result.Contents = (char *)PushCopy(Memory, Buffer.Size, Buffer.Contents, Alignment);
+    return Result;
+}
+
+buffer PushStringCopy(memory_arena *Memory, buffer Buffer)
+{
+    buffer Result;
+    Result.Size = Buffer.Size;
+    Result.Contents = (char *)PushCopy(Memory, Buffer.Size, Buffer.Contents, 1);
+    return Result;
+}
+
+string Concat(memory_arena *Memory, string A, string B)
+{
+    size Size = A.Size + B.Size;
+    string Result = PushBuffer(Memory, Size, ArenaFlag_NoClear, 1);
+    char *At = Result.Contents;
+
+    MemoryCopy(At, A.Contents, A.Size);  At += A.Size;
+    MemoryCopy(At, B.Contents, B.Size);  At += B.Size;
+
+    return Result;
+}
+
+string
+Concat(memory_arena *Memory, string A, string B, string C)
+{
+    size Size = A.Size + B.Size + C.Size;
+    string Result = PushBuffer(Memory, Size, ArenaFlag_NoClear, 1);
+    char *At = Result.Contents;
+
+    MemoryCopy(At, A.Contents, A.Size);  At += A.Size;
+    MemoryCopy(At, B.Contents, B.Size);  At += B.Size;
+    MemoryCopy(At, C.Contents, C.Size);  At += C.Size;
+
+    return Result;
+}
+
+string
+Concat(memory_arena *Memory, string A, char Separator, string B)
+{
+    size Size = A.Size + sizeof(Separator) + B.Size;
+    string Result = PushBuffer(Memory, Size, ArenaFlag_NoClear, 1);
+    char *At = Result.Contents;
+
+    MemoryCopy(At, A.Contents, A.Size);             At += A.Size;
+    MemoryCopy(At, &Separator, sizeof(Separator));  At += sizeof(Separator);
+    MemoryCopy(At, B.Contents, B.Size);             At += B.Size;
+
+    return Result;
+}
