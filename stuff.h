@@ -28,6 +28,8 @@ typedef buffer string;
 #define S(s) string{sizeof(s)-1,s}
 #define WrapBuf(b) buffer{sizeof(b),b}
 
+#define OffsetOf(Struct, Member) ((uintptr_t)&((Struct *)0)->Member)
+
 
 // NOTE(robin): C++ calls JS
 #define js_import extern "C" 
@@ -36,23 +38,24 @@ typedef buffer string;
 #define js_export extern "C" __attribute__((visibility("default")))
 
 // NOTE(robin): console.log
-js_import void JSLog(size StringLength, void *StringPtr);
+js_import void JS_Log(size StringLength, void *StringPtr);
 
-js_import void JSAbort(size ReasonLength, void *ReasonPtr,
+// NOTE(robin): throw new Error(File + Line + Reason)
+js_import void JS_Abort(size ReasonLength, void *ReasonPtr,
                        size FileNameLength, void *FileNamePtr,
                        u32 LineNumber);
 
 
-void JSAbort(string Reason, string FileName, u32 LineNumber)
+void JS_Abort(string Reason, string FileName, u32 LineNumber)
 {
-    JSAbort(Reason.Size, Reason.Contents, FileName.Size, FileName.Contents, LineNumber);
+    JS_Abort(Reason.Size, Reason.Contents, FileName.Size, FileName.Contents, LineNumber);
 }
 
-#define Assert(Condition) if(!(Condition)) JSAbort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
+#define Assert(Condition) if(!(Condition)) JS_Abort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
 
-void JSLog(string String)
+void JS_Log(string String)
 {
-    JSLog(String.Size, String.Contents);
+    JS_Log(String.Size, String.Contents);
 }
 
 template<typename number>
@@ -244,7 +247,7 @@ void Printf_(string Format, ...)
     string Result = FormatText_(Dest, Format, Args);
     va_end(Args);
 
-    JSLog(Result);
+    JS_Log(Result);
 }
 
 struct memory_arena

@@ -1,5 +1,6 @@
-JSLog
-JSAbort
+JS_Log
+JS_Abort
+JS_GL_CreateCompileAndLinkProgram
 
 glClear
 glClearColor
@@ -11,6 +12,7 @@ glCreateProgram
 glAttachShader
 glLinkProgram
 glUseProgram
+glGetAttribLocation
 
 glCreateBuffer
 glBindBuffer

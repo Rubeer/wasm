@@ -47,8 +47,6 @@
     const Memory = new Uint8Array(Imports.memory.buffer);
     var gl = null;
     var GLObjects = new Array();
-
-    var shade = 0.0;
     
     const ASCIIDecoder = new TextDecoder("ascii");
     function GetWasmString(Length, Pointer)
@@ -64,12 +62,12 @@
     }
 
 
-    Imports.JSLog = function(MsgLength, MsgPtr)
+    Imports.JS_Log = function(MsgLength, MsgPtr)
     {
         console.log("main.wasm: " + GetWasmString(MsgLength, MsgPtr));
     }
 
-    Imports.JSAbort = function(ReasonLength, ReasonPtr,
+    Imports.JS_Abort = function(ReasonLength, ReasonPtr,
                                FileNameLength, FileNamePtr,
                                LineNumber)
     {
@@ -85,23 +83,27 @@
     Imports.glCreateShader = function(Type) { return PushGLObj(gl.createShader(Type)); }
     Imports.glCreateProgram = function() { return PushGLObj(gl.createProgram()); }
     Imports.glAttachShader = function(Program, Shader) { gl.attachShader(GLObjects[Program], GLObjects[Shader]); }
+    Imports.glLinkProgram = function(Program) { gl.linkProgram(Prog); }
     Imports.glUseProgram = function(Program) { gl.useProgram(GLObjects[Program]); }
     Imports.glCreateVertexArray = function(Program) {return PushGLObj(gl.createVertexArray()) };
     Imports.glCreateBuffer = function(Program) {return PushGLObj(gl.createBuffer()) };
     Imports.glBindBuffer = function(Type, Buffer) { gl.bindBuffer(Type, GLObjects[Buffer]); }
     Imports.glBindVertexArray = function(Arr) { gl.bindVertexArray(GLObjects[Arr]); }
-    Imports.glEnableVertexAttribArray = function(Index) { gl.enableVertexAttribArray(Index); }
+    Imports.glEnableVertexAttribArray = function(Index) { gl.enableVertexAttribArray(Index) };
     Imports.glDrawArrays = function(DrawMode, First, Count) { gl.drawArrays(DrawMode, First, Count); }
 
+    Imports.glGetAttribLocation = function(Program, NameLength, NamePtr)
+    {
+        return gl.getAttribLocation(GLObjects[Program], GetWasmString(NameLength, NamePtr)); 
+    }
 
     Imports.glVertexAttribPointer = function(Index, Size, Type, Normalized, Stride, Offset) 
     {
-        gl.vertexAttribPointer(GLObjects[Index], Size, Type, Normalized, Stride, Offset);
+        gl.vertexAttribPointer(Index, Size, Type, Normalized, Stride, Offset);
     }
 
     Imports.glShaderSource = function(ShaderID, SourceLen, SourcePtr)
     {
-        console.log("ID: ", ShaderID);
         return gl.shaderSource(GLObjects[ShaderID], GetWasmString(SourceLen, SourcePtr));
     }
 
@@ -115,20 +117,41 @@
         }
     }
 
-    Imports.glLinkProgram = function(Program)
-    {
-        const Prog = GLObjects[Program];
-        gl.linkProgram(Prog);
-        if(!gl.getProgramParameter(Prog, gl.LINK_STATUS))
-        {
-            throw new Error(gl.getProgramInfoLog(Prog));
-        }
-    }
 
     Imports.glBufferData = function(Type, Size, DataPtr, UsageHint)
     {
         const Data = Memory.subarray(DataPtr, DataPtr+Size);
         gl.bufferData(Type, Data, UsageHint);
+    }
+
+    function CompileShader(Type, SourceLen, SourcePtr)
+    {
+        const Shader = gl.createShader(Type);
+        gl.shaderSource(Shader, GetWasmString(SourceLen, SourcePtr));
+        gl.compileShader(Shader);
+        if(!gl.getShaderParameter(Shader, gl.COMPILE_STATUS))
+        {
+            throw new Error(gl.getShaderInfoLog(Shader));
+        }
+        return Shader;
+    }
+
+    Imports.JS_GL_CreateCompileAndLinkProgram = function(VertLen, VertPtr, FragLen, FragPtr)
+    {
+        const Vert = CompileShader(gl.VERTEX_SHADER, VertLen, VertPtr);
+        const Frag = CompileShader(gl.FRAGMENT_SHADER, FragLen, FragPtr);
+        const Program = gl.createProgram();
+        gl.attachShader(Program, Vert);
+        gl.attachShader(Program, Frag);
+        gl.linkProgram(Program);
+        gl.deleteShader(Vert);
+        gl.deleteShader(Frag);
+        if(!gl.getProgramParameter(Program, gl.LINK_STATUS))
+        {
+            throw new Error(gl.getProgramInfoLog(Program));
+        }
+
+        return PushGLObj(Program);
     }
 
 
@@ -151,8 +174,10 @@
             const Height = window.innerHeight;
             Canvas.width = Width;
             Canvas.height = Height;
-            gl.canvas.width = Width * Ratio;
-            gl.canvas.height = Height * Ratio;
+            gl.canvas.width = Width*Ratio;
+            gl.canvas.height = Height*Ratio;
+            gl.viewport(0, 0, Width*Ratio, Height*Ratio);
+            console.log("Resize");
 
         }
         window.addEventListener('resize', Resize);
@@ -167,23 +192,17 @@
 
         Functions.Init(MemorySize);
 
-        function Render()
+        function RenderLoop()
         {
-            shade += 0.001;
-            if(shade >= 1.0)
-            {
-                shade = 0.0;
-            }
-            const d = Math.sqrt(shade);
-            gl.clearColor(d, d, d, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, 0.5);
+            window.requestAnimationFrame(RenderLoop);
 
-            window.requestAnimationFrame(Render);
+            gl.clearColor(0.1, 0.1, 0.1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, 0.0);
         }
 
         Resize();
-        Render();
+        RenderLoop();
     }
 
     Init();

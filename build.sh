@@ -9,7 +9,7 @@ mkdir -p $DIR/bin
 pushd $DIR/bin > /dev/null
 
 # We turn on ALL warnings and selectively turn off the ones we don't like.
-warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-writable-strings -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-extra-semi-stmt -Wno-gnu-zero-variadic-macro-arguments"
+warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-writable-strings -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-extra-semi-stmt -Wno-gnu-zero-variadic-macro-arguments -Wno-zero-as-null-pointer-constant -Wno-unused-parameter"
 # Turn off dumb "features" (maybe redundant when compiling bare wasm)
 make_cpp_dumb="-fno-exceptions -fno-rtti -fno-threadsafe-statics -fwrapv"
 

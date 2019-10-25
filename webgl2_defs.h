@@ -1,4 +1,6 @@
 
+#define GL_FLOAT                          0x1406
+#define GL_UNSIGNED_BYTE                  0x1401
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_ARRAY_BUFFER                   0x8892
@@ -51,6 +53,7 @@ js_import GLuint glCreateProgram();
 js_import void glAttachShader(GLuint program, GLuint shader);
 js_import void glLinkProgram (GLuint program);
 js_import void glUseProgram (GLuint program);
+js_import GLuint glGetAttribLocation (GLuint Program, u32 NameLength, char *NamePtr);
 
 js_import GLuint glCreateBuffer();
 js_import void glBindBuffer (GLenum target, GLuint buffer);
@@ -62,3 +65,10 @@ js_import void glEnableVertexAttribArray (GLuint index);
 js_import void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 
 js_import void glDrawArrays(GLenum mode, GLint first, GLsizei count);
+
+//
+// custom stuff
+//
+js_import GLuint JS_GL_CreateCompileAndLinkProgram(u32 VertLen, char *VertSrc, u32 FragLen, char *FragSrc);
+
+

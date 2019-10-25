@@ -3,78 +3,97 @@
 #include "stuff.h"
 #include "webgl2_defs.h"
 
-GLuint CompileShader(string Source, GLenum Type)
+struct v4
 {
-    GLuint Shader = glCreateShader(Type);
-    glShaderSource(Shader, Source.Size, Source.Contents);
-    glCompileShader(Shader);
-    return Shader;
-}
-
-struct v3
-{
-    f32 x,y,z;
+    f32 x,y,z,w;
 };
 
 struct vertex
 {
-    v3 P;
-    u32 C;
+    v4 Position;
+    u32 Color;
 };
+
 
 js_export void Init(size InitMemorySize)
 {
-    GLuint Vert = CompileShader(S(
+    (void)InitMemorySize;
+    string Vert = S(
 R"raw(  #version 300 es
         
         layout (location=0) in vec4 Position;
-        layout (location=1) in vec3 Color;
+        layout (location=1) in vec4 Color;
         
-        out vec3 VertColor;
+        out vec4 VertColor;
 
         void main()
         {
             VertColor = Color;
             gl_Position = Position;
         }
-    )raw"), GL_VERTEX_SHADER);
+    )raw");
 
-    GLuint Frag = CompileShader(S(
+    string Frag = S(
 R"raw(  #version 300 es
         precision highp float;
         
-        in vec3 VertColor;
+        in vec4 VertColor;
         out vec4 FragColor;
+
+        vec3 LinearToSRGB_Approx(vec3 x)
+        {
+            // NOTE(robin): The GPU has dedicated hardware to do this but we can't access that in WebGL..
+            // https://mimosa-pudica.net/fast-gamma/
+            vec3 a = vec3(0.00279491f);
+            vec3 b = vec3(1.15907984f);
+            vec3 c = b * inversesqrt(a + vec3(1.0f)) - vec3(1.0f);
+            vec3 Result = (b * inversesqrt(x + a) - c) * x;
+            return Result;
+        }
 
         void main()
         {
-            FragColor = vec4(VertColor, 1.0);
+            FragColor = vec4(LinearToSRGB_Approx(VertColor.rgb), VertColor.a);
+            //FragColor = VertColor;
         }
-    )raw"), GL_FRAGMENT_SHADER);
+    )raw");
 
-    GLuint Program = glCreateProgram();
-    glAttachShader(Program, Vert);
-    glAttachShader(Program, Frag);
-    glLinkProgram(Program);
+    GLuint Program = JS_GL_CreateCompileAndLinkProgram(Vert.Size, Vert.Contents,
+                                                       Frag.Size, Frag.Contents);
     glUseProgram(Program);
-
-    GLuint VertexArray = glCreateVertexArray();
-    glBindVertexArray(VertexArray);
 
     GLuint Buffer = glCreateBuffer();
     glBindBuffer(GL_ARRAY_BUFFER, Buffer);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT,         false, sizeof(vertex), (void *)offsetof(vertex, P));
+    GLuint VertexArray = glCreateVertexArray();
+    glBindVertexArray(VertexArray);
+
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, false, sizeof(vertex), (void *)offsetof(vertex, C));
+    glVertexAttribPointer(0, 4, GL_FLOAT,         false, sizeof(vertex), (void *)OffsetOf(vertex, Position));
+
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, Color));
+
 
 }
 
 js_export void UpdateAndRender(u32 Width, u32 Height, f32 Test)
 {
-    f32 Triangle[3];
-    Triangle[0].P = {-0.5f, -0.5f, 0.0f};
-    Triangle[1].P = {0.5f, -0.5f, 0.0f};
-    Triangle[2].P = {0.0f, 0.5f, 0.0f};
+    static f32 TestValue = -1.0f;
+    TestValue += 0.005f;
+
+    if(TestValue >= 1.0f)
+    {
+        TestValue -= 2.0f;
+    }
+
+    vertex Triangle[] =
+    {
+        {{-0.5f,     -0.5f, 0.0f, 1.0f}, 0xFF0000FF},
+        {{ 0.5f,     -0.5f, 0.0f, 1.0f}, 0xFF00FF00},
+        {{ TestValue, 0.5f, 0.0f, 1.0f}, 0xFFFF0000},
+    };
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Triangle), Triangle, GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
