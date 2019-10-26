@@ -198,10 +198,8 @@
             const Ratio = window.devicePixelRatio;
             const Width = window.innerWidth;
             const Height = window.innerHeight;
-            Canvas.width = Width;
-            Canvas.height = Height;
-            gl.canvas.width = Width*Ratio;
-            gl.canvas.height = Height*Ratio;
+            gl.canvas.width = Width;
+            gl.canvas.height = Height;
             gl.viewport(0, 0, Width, Height);
             console.log("Resize");
 
