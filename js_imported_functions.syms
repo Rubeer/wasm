@@ -2,6 +2,9 @@ JS_Log
 JS_Abort
 JS_GL_CreateCompileAndLinkProgram
 
+glEnable
+glDisable
+
 glClear
 glClearColor
 
@@ -13,6 +16,8 @@ glAttachShader
 glLinkProgram
 glUseProgram
 glGetAttribLocation
+glGetUniformLocation
+glUniformMatrix4fv
 
 glCreateBuffer
 glBindBuffer

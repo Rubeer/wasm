@@ -29,11 +29,12 @@
 #define GL_ONE_MINUS_DST_COLOR            0x0307
 #define GL_DEPTH_TEST                     0x0B71
 #define GL_TEXTURE0                       0x84C0
+#define GL_CULL_FACE                      0x0B44
 
 typedef float GLfloat;
 typedef float GLclampf;
 typedef int GLint;
-typedef int GLsizei;
+typedef unsigned int GLsizei;
 typedef unsigned int GLuint;
 typedef unsigned int GLbitfield;
 typedef unsigned char GLboolean;
@@ -42,33 +43,42 @@ typedef uintptr_t GLsizeiptr;
 typedef void GLvoid;
 
 
+import_from_js void glDisable (GLenum cap);
+import_from_js void glEnable (GLenum cap);
 
-js_import void glClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
-js_import void glClear(GLbitfield mask);
+import_from_js void glClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
+import_from_js void glClear(GLbitfield mask);
 
-js_import void glShaderSource(GLuint shader, GLsizei Length, void *Data);
-js_import GLuint glCreateShader(GLenum type);
-js_import void glCompileShader(GLuint shader);
-js_import GLuint glCreateProgram();
-js_import void glAttachShader(GLuint program, GLuint shader);
-js_import void glLinkProgram (GLuint program);
-js_import void glUseProgram (GLuint program);
-js_import GLuint glGetAttribLocation (GLuint Program, u32 NameLength, char *NamePtr);
+import_from_js void glShaderSource(GLuint shader, GLsizei Length, void *Data);
+import_from_js GLuint glCreateShader(GLenum type);
+import_from_js void glCompileShader(GLuint shader);
+import_from_js GLuint glCreateProgram();
+import_from_js void glAttachShader(GLuint program, GLuint shader);
+import_from_js void glLinkProgram (GLuint program);
+import_from_js void glUseProgram (GLuint program);
+import_from_js GLuint glGetAttribLocation (GLuint Program, u32 NameLength, char *NamePtr);
 
-js_import GLuint glCreateBuffer();
-js_import void glBindBuffer (GLenum target, GLuint buffer);
-js_import void glBufferData (GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+import_from_js GLuint glCreateBuffer();
+import_from_js void glBindBuffer (GLenum target, GLuint buffer);
+import_from_js void glBufferData (GLenum target, GLsizeiptr size, const void *data, GLenum usage);
 
-js_import GLuint glCreateVertexArray();
-js_import void glBindVertexArray(GLuint array);
-js_import void glEnableVertexAttribArray (GLuint index);
-js_import void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+import_from_js GLuint glCreateVertexArray();
+import_from_js void glBindVertexArray(GLuint array);
+import_from_js void glEnableVertexAttribArray (GLuint index);
+import_from_js void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+import_from_js GLuint glGetUniformLocation (GLuint Program, u32 NameLength, char *NamePtr);
+import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 *Data);
 
-js_import void glDrawArrays(GLenum mode, GLint first, GLsizei count);
+import_from_js void glDrawArrays(GLenum mode, GLint first, GLsizei count);
 
-//
-// custom stuff
-//
-js_import GLuint JS_GL_CreateCompileAndLinkProgram(u32 VertLen, char *VertSrc, u32 FragLen, char *FragSrc);
+
+
+
+function GLuint glGetUniformLocation(GLuint Program, string Name)
+{
+    return glGetUniformLocation(Program, Name.Size, Name.Contents);
+}
+
+import_from_js GLuint JS_GL_CreateCompileAndLinkProgram(u32 VertLen, char *VertSrc, u32 FragLen, char *FragSrc);
 
 

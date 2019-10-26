@@ -40,7 +40,7 @@
 
 <script>
     // NOTE(robin): Globals
-    const MemoryPageCount = 32;
+    const MemoryPageCount = 1024;
     const MemorySize = MemoryPageCount * 65536;
     let Imports = {};
     Imports.memory = new WebAssembly.Memory({initial:MemoryPageCount});
@@ -91,6 +91,19 @@
     Imports.glBindVertexArray = function(Arr) { gl.bindVertexArray(GLObjects[Arr]); }
     Imports.glEnableVertexAttribArray = function(Index) { gl.enableVertexAttribArray(Index) };
     Imports.glDrawArrays = function(DrawMode, First, Count) { gl.drawArrays(DrawMode, First, Count); }
+    Imports.glEnable = function(Mode) { gl.enable(Mode); }
+    Imports.glDisable = function(Mode) { gl.disable(Mode); }
+
+    Imports.glGetUniformLocation = function(Program, NameLen, NamePtr)
+    {
+        return PushGLObj(gl.getUniformLocation(GLObjects[Program], GetWasmString(NameLen, NamePtr)));
+    }
+
+    Imports.glUniformMatrix4fv = function(Loc, Transpose, DataPtr)
+    {
+        const Data = new Float32Array(Memory.buffer, DataPtr, 16);
+        gl.uniformMatrix4fv(GLObjects[Loc], Transpose, Data);
+    }
 
     Imports.glGetAttribLocation = function(Program, NameLength, NamePtr)
     {
@@ -176,7 +189,7 @@
             Canvas.height = Height;
             gl.canvas.width = Width*Ratio;
             gl.canvas.height = Height*Ratio;
-            gl.viewport(0, 0, Width*Ratio, Height*Ratio);
+            gl.viewport(0, 0, Width, Height);
             console.log("Resize");
 
         }
@@ -190,13 +203,13 @@
             throw Error(Message);
         }
 
-        Functions.Init(MemorySize);
+        Functions.InitOpenGL();
 
         function RenderLoop()
         {
             window.requestAnimationFrame(RenderLoop);
 
-            gl.clearColor(0.1, 0.1, 0.1, 1);
+            gl.clearColor(0.3, 0.3, 0.3, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
             Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, 0.0);
         }
