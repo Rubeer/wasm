@@ -44,6 +44,13 @@ function void PushQuad(vertex V0,
     vertex *Verts = State.Vertices + State.VertexCount;
     State.VertexCount += 6;
 
+//       0 _____1
+//        |   /|
+//        |  / |
+//        | /  |
+//        |/_ _|
+//       2      3
+
     Verts[0] = V0;
     Verts[1] = V2;
     Verts[2] = V1;
