@@ -14,7 +14,7 @@ warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-wri
 make_cpp_dumb="-fno-exceptions -fno-rtti -fno-threadsafe-statics -fwrapv"
 
 # Translate C++ to LLVM bytecode
-clang -c -emit-llvm -Ofast --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
+clang -c -emit-llvm -Ofast -ffast-math --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
 
 if [[ $? -eq 0 ]]
 then

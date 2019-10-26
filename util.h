@@ -394,6 +394,7 @@ function string Concat(memory_arena *Memory, string A, char Separator, string B)
 
 function f32 Square(f32 V) { return V*V; }
 function f32 SquareRoot(f32 V) { return __builtin_sqrtf(V); }
+function s32 Abs(s32 V) { return __builtin_abs(V); }
 
 function f32 SmoothCurve010(f32 x)
 {

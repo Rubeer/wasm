@@ -40,6 +40,7 @@ typedef unsigned int GLbitfield;
 typedef unsigned char GLboolean;
 typedef unsigned int GLenum;
 typedef uintptr_t GLsizeiptr;
+typedef intptr_t GLintptr;
 typedef void GLvoid;
 
 
@@ -60,7 +61,9 @@ import_from_js GLuint glGetAttribLocation (GLuint Program, u32 NameLength, char 
 
 import_from_js GLuint glCreateBuffer();
 import_from_js void glBindBuffer (GLenum target, GLuint buffer);
-import_from_js void glBufferData (GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+import_from_js void glBufferData (GLenum target, GLsizeiptr size, const GLvoid *data, GLenum usage);
+import_from_js void glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const GLvoid *data);
+ 
 
 import_from_js GLuint glCreateVertexArray();
 import_from_js void glBindVertexArray(GLuint array);

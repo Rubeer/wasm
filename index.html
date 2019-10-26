@@ -131,10 +131,23 @@
     }
 
 
-    Imports.glBufferData = function(Type, Size, DataPtr, UsageHint)
+    Imports.glBufferData = function(Target, Size, DataPtr, UsageHint)
+    {
+        if(DataPtr != 0)
+        {
+            const Data = Memory.subarray(DataPtr, DataPtr+Size);
+            gl.bufferData(Target, Data, UsageHint); // Allocate&upload to GPU
+        }
+        else
+        {
+            gl.bufferData(Target, Size, UsageHint); // Only allocate
+        }
+    }
+
+    Imports.glBufferSubData = function(Target, Offset, Size, DataPtr)
     {
         const Data = Memory.subarray(DataPtr, DataPtr+Size);
-        gl.bufferData(Type, Data, UsageHint);
+        gl.bufferSubData(Target, Offset, Data);
     }
 
     function CompileShader(Type, SourceLen, SourcePtr)
@@ -205,17 +218,20 @@
 
         Functions.InitOpenGL();
 
-        function RenderLoop()
+        var Prev = null;
+        function RenderLoop(Now)
         {
-            window.requestAnimationFrame(RenderLoop);
+            var DeltaTime = Prev ? Now - Prev : Now;
+            Prev = Now;
 
+            window.requestAnimationFrame(RenderLoop);
             gl.clearColor(0.3, 0.3, 0.3, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, 0.0);
+            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
         }
 
         Resize();
-        RenderLoop();
+        window.requestAnimationFrame(RenderLoop);
     }
 
     Init();

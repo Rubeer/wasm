@@ -44,18 +44,6 @@ function void PushQuad(vertex V0,
     vertex *Verts = State.Vertices + State.VertexCount;
     State.VertexCount += 6;
 
-    Assert(State.VertexCount <= ArrayCount(State.Vertices));
-
-    /*   
-         0 _____1
-          |   /|
-          |  / |
-          | /  |
-          |/_ _|
-         2      3
-    */
-
-    // TODO(robin): Index buffer
     Verts[0] = V0;
     Verts[1] = V2;
     Verts[2] = V1;
@@ -173,6 +161,7 @@ R"raw(  #version 300 es
 
     OpenGL->Buffer = glCreateBuffer();
     glBindBuffer(GL_ARRAY_BUFFER, OpenGL->Buffer);
+    glBufferData(GL_ARRAY_BUFFER, ArrayCount(State.Vertices)*sizeof(vertex), 0, GL_STREAM_DRAW);
 
     OpenGL->VertexArray = glCreateVertexArray();
     glBindVertexArray(OpenGL->VertexArray);
@@ -190,22 +179,34 @@ R"raw(  #version 300 es
 }
 
 
-export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 Test)
+export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
+    State.VertexCount = 0;
+
     //PushBox(v3{0,0,v*0.3f}, v3{5,5,5});
 
     static f32 t = 0;
-    t += 0.001f;
+    t += DeltaTime*0.1f;
     if(t >= 1.0f)
         t -= 1.0f;
 
     f32 v = SmoothCurve010(t);
 
-    State.VertexCount = 0;
+
     random_state Random = DefaultSeed();
-    for(s32 y = -13; y < 20; ++y)
+
+    s32 MinX = -70;
+    s32 MaxX =  70;
+    s32 MinY = -14;
+    s32 MaxY =  70;
+
+    s32 VertsPerBox = 6*6;
+    s32 TotalVerts = VertsPerBox * (MaxX - MinX) * (MaxY - MinY);
+    Assert(State.VertexCount + (u32)TotalVerts < ArrayCount(State.Vertices));
+
+    for(s32 y = MinY; y < MaxY; ++y)
     {
-        for(s32 x = -20; x < 20; ++x)
+        for(s32 x = MinX; x < MaxX; ++x)
         {
             v3 P;
             P.x = (f32)x;
@@ -245,11 +246,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 Test)
     opengl *OpenGL = &State.OpenGL;
 
 
-    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->Buffer);
-    glBufferData(GL_ARRAY_BUFFER, State.VertexCount*sizeof(vertex), State.Vertices, GL_STREAM_DRAW);
     glBindVertexArray(OpenGL->VertexArray);
     glUseProgram(OpenGL->Program);
     glUniformMatrix4fv(OpenGL->Projection, true, &Transform);
+    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->Buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(vertex), State.Vertices);
     glDrawArrays(GL_TRIANGLES, 0, State.VertexCount);
 }
 
