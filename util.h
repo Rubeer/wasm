@@ -64,7 +64,7 @@ function void JS_Abort(string Reason, string FileName, u32 LineNumber)
     JS_Abort(Reason.Size, Reason.Contents, FileName.Size, FileName.Contents, LineNumber);
 }
 
-#define Assert(Condition) if((!(Condition))) JS_Abort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
+#define Assert(Condition) if(Unlikely(!(Condition))) JS_Abort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
 
 function void JS_Log(string String)
 {

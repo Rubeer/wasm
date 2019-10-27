@@ -18,7 +18,7 @@ struct vertex
 
 struct opengl
 {
-    GLuint Buffer;
+    GLuint VertexBuffer;
     GLuint VertexArray;
     GLuint Program;
 
@@ -50,7 +50,7 @@ function void PushQuad(vertex V0,
 //        | /  |
 //        |/_ _|
 //       2      3
-
+    // TOOD(robin): Index buffer
     Verts[0] = V0;
     Verts[1] = V2;
     Verts[2] = V1;
@@ -106,6 +106,7 @@ function void PushBox(v3 P, v3 Dim)
     V6.C = Blue;
     V7.C = White;
 
+    // TOOD(robin): Index buffer
     PushQuad(V0, V1, V2, V3); // Front
     PushQuad(V1, V5, V3, V7); // Right
     PushQuad(V4, V0, V6, V2); // Left
@@ -166,8 +167,8 @@ R"raw(  #version 300 es
 
     OpenGL->Projection = glGetUniformLocation(OpenGL->Program, S("Projection"));
 
-    OpenGL->Buffer = glCreateBuffer();
-    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->Buffer);
+    OpenGL->VertexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, ArrayCount(State.Vertices)*sizeof(vertex), 0, GL_STREAM_DRAW);
 
     OpenGL->VertexArray = glCreateVertexArray();
@@ -222,6 +223,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     {
         for(s32 x = MinX; x < MaxX; ++x)
         {
+            //
+            // NOTE(robin): Should normally use instanced rendering, but this is just a test
+            //
+
             v3 P;
             P.x = (f32)x;
             P.y = (f32)y;
@@ -237,6 +242,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             v3 Dim = Lerp(NormalDim, v[0], WeirdDim);
 
             PushBox(P, Dim);
+
             if(x == 0 && y == -10) LookAt = P;
         }
     }
@@ -260,12 +266,14 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     opengl *OpenGL = &State.OpenGL;
 
+    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(vertex), State.Vertices);
 
     glBindVertexArray(OpenGL->VertexArray);
+
     glUseProgram(OpenGL->Program);
     glUniformMatrix4fv(OpenGL->Projection, true, &Transform);
-    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->Buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(vertex), State.Vertices);
+
     glDrawArrays(GL_TRIANGLES, 0, State.VertexCount);
 }
 
