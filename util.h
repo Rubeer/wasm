@@ -51,6 +51,9 @@ typedef buffer string;
 #define import_from_js extern "C" 
 #define export_to_js extern "C" __attribute__((visibility("default")))
 
+#define Likely(Condition)   __builtin_expect(!!(Condition), 1)
+#define Unlikely(Condition) __builtin_expect(!!(Condition), 0)
+
 // NOTE(robin): console.log
 import_from_js void JS_Log(size StringLength, void *StringPtr);
 
@@ -61,7 +64,7 @@ function void JS_Abort(string Reason, string FileName, u32 LineNumber)
     JS_Abort(Reason.Size, Reason.Contents, FileName.Size, FileName.Contents, LineNumber);
 }
 
-#define Assert(Condition) if(!(Condition)) JS_Abort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
+#define Assert(Condition) if((!(Condition))) JS_Abort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
 
 function void JS_Log(string String)
 {
@@ -684,11 +687,17 @@ function m4x4 MatrixAsRows(v3 X, v3 Y, v3 Z)
 function m4x4_inv
 PerspectiveProjectionTransform(u32 Width, u32 Height, f32 NearClip, f32 FarClip, f32 FocalLength)
 {
-    f32 r = (f32)Width / (f32)Height;
+
     f32 n = NearClip;
     f32 f = FarClip;
 
-    f32 l = FocalLength;
+    f32 x = FocalLength;
+    f32 y = FocalLength;
+
+    if(Width > Height)
+        x *= (f32)Height / (f32)Width;
+    else
+        y *= (f32)Width  / (f32)Height;
     
     f32 a = (n + f) / (n - f);
     f32 b = (n*f*2) / (n - f);
@@ -696,17 +705,17 @@ PerspectiveProjectionTransform(u32 Width, u32 Height, f32 NearClip, f32 FarClip,
     m4x4_inv Result;
     Result.Forward = 
     {
-        {{ l,   0,  0,  0},
-         { 0, r*l,  0,  0},
-         { 0,   0,  a,  b},
-         { 0,   0, -1,  0}}
+        {{ x,  0,  0,  0},
+         { 0,  y,  0,  0},
+         { 0,  0,  a,  b},
+         { 0,  0, -1,  0}}
     };
     Result.Inverse =
     {
-        {{1/l,       0,    0,    0},
-         {  0, 1/(r*l),    0,    0},
-         {  0,       0,    0,   -1},
-         {  0,       0,  1/b,  a/b}}
+        {{1/x,     0,    0,    0},
+         {  0,   1/y,    0,    0},
+         {  0,     0,    0,   -1},
+         {  0,     0,  1/b,  a/b}}
     };
     
     return Result;

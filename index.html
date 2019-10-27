@@ -7,39 +7,7 @@
 <style> body{ margin: 0; overflow: hidden; } </style>
 <canvas id="canvas_webgl"> </canvas>
 
-
-<script type="vertex_shader" id="VertexShader">
-    #version 300 es
-    
-    layout (location=0) in vec4 Position;
-    layout (location=1) in vec3 Color;
-    
-    out vec3 VertColor;
-
-    void main()
-    {
-        VertColor = Color;
-        gl_Position = Position;
-    }
-</script>
-
-<script type="fragment_shader" id="FragmentShader">
-
-    #version 300 es
-    precision highp float;
-    
-    in vec3 VertColor;
-    out vec4 FragColor;
-
-    void main()
-    {
-        FragColor = vec4(vColor, 1.0);
-    }
-
-</script>
-
 <script>
-    // NOTE(robin): Globals
     const MemoryPageCount = 1024;
     const MemorySize = MemoryPageCount * 65536;
     let Imports = {};
@@ -47,8 +15,8 @@
     const Memory = new Uint8Array(Imports.memory.buffer);
     var gl = null;
     var GLObjects = new Array();
-    
     const ASCIIDecoder = new TextDecoder("ascii");
+
     function GetWasmString(Length, Pointer)
     {
         const Data = Memory.subarray(Pointer, Pointer+Length);

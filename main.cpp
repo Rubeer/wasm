@@ -192,24 +192,31 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     //PushBox(v3{0,0,v*0.3f}, v3{5,5,5});
 
-    static f32 t = 0;
-    t += DeltaTime*0.1f;
-    if(t >= 1.0f)
-        t -= 1.0f;
-
-    f32 v = SmoothCurve010(t);
+    static f32 t[4] = {0, 0.15f, 0.415f, 0.865f};
+    f32 v[4];
+    for(size i = 0; i < ArrayCount(t); ++i)
+    {
+        t[i] += DeltaTime*0.1f;
+        if(t[i] >= 1.0f)
+        {
+            t[i] = 0.0f;
+        }
+        v[i] = SmoothCurve010(t[i]);
+    }
 
 
     random_state Random = DefaultSeed();
 
-    s32 MinX = -70;
-    s32 MaxX =  70;
+    s32 MinX = -50;
+    s32 MaxX =  50;
     s32 MinY = -14;
-    s32 MaxY =  70;
+    s32 MaxY =  50;
 
     s32 VertsPerBox = 6*6;
     s32 TotalVerts = VertsPerBox * (MaxX - MinX) * (MaxY - MinY);
     Assert(State.VertexCount + (u32)TotalVerts < ArrayCount(State.Vertices));
+
+    v3 LookAt = {};
 
     for(s32 y = MinY; y < MaxY; ++y)
     {
@@ -218,7 +225,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             v3 P;
             P.x = (f32)x;
             P.y = (f32)y;
-            P.z = 1.5f*v*RandomBilateral(&Random);
+            P.z = 1.5f*v[0]*RandomBilateral(&Random);
 
             v3 NormalDim = v3{0.8f, 0.8f, 0.8f};
 
@@ -227,18 +234,19 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             WeirdDim.y += 0.7f*RandomUnilateral(&Random);
             WeirdDim.z += 0.7f*RandomUnilateral(&Random);
 
-            v3 Dim = Lerp(NormalDim, v, WeirdDim);
+            v3 Dim = Lerp(NormalDim, v[0], WeirdDim);
 
             PushBox(P, Dim);
+            if(x == 0 && y == -10) LookAt = P;
         }
     }
 
 
-    v3 CameraP = {-10 + 20*v, -15, 2 + 3*SmoothCurve010(1.25f*t)};
+    v3 CameraP = {-3 + 6*v[0], -15, 2 + 1*v[1]};
 
     v3 Up = {0, 0, 1};
 
-    v3 CameraZ = Normalize(CameraP);
+    v3 CameraZ = Normalize(CameraP - LookAt);
     v3 CameraX = Normalize(Cross(Up, CameraZ));
     v3 CameraY = Cross(CameraZ, CameraX);
     m4x4_inv Camera = CameraTransform(CameraX, CameraY, CameraZ, CameraP);
