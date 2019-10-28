@@ -10,7 +10,7 @@ typedef uint64_t u64;
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
-typedef uint64_t u64;
+typedef int64_t s64;
 
 typedef uintptr_t size;
 
@@ -31,7 +31,6 @@ constexpr u64 U64Max = 0xFFFFFFFFFFFFFFFF;
 #define local_persist static
 #define global static
 
-#define InvalidDefaultCase default: assert(!"Invalid default case hit!")
 #define ArrayCount(x) (sizeof(x) / sizeof(*(x)))
 
 #define Kilobytes(x) ((u64)(x) * 1024)
@@ -45,7 +44,7 @@ struct buffer
 };
 typedef buffer string;
 
-#define S(s) string{sizeof(s)-1,s}
+#define S(s) string{sizeof(s)-1,(char *)s}
 #define WrapBuf(b) buffer{sizeof(b),b}
 
 #define import_from_js extern "C" 
@@ -58,13 +57,18 @@ typedef buffer string;
 import_from_js void JS_Log(size StringLength, void *StringPtr);
 
 // NOTE(robin): throw new Error(File + Line + Reason)
-import_from_js void JS_Abort(size ReasonLength, void *ReasonPtr, size FileNameLength, void *FileNamePtr, u32 LineNumber);
-function void JS_Abort(string Reason, string FileName, u32 LineNumber)
+import_from_js void JS_Abort(size ReasonLength, void *ReasonPtr, size FileNameLength, void *FileNamePtr, size FuncNameSize, void *FuncNamePtr, u32 LineNumber);
+function void JS_Abort(string Reason, string File, string Func, u32 LineNumber)
 {
-    JS_Abort(Reason.Size, Reason.Contents, FileName.Size, FileName.Contents, LineNumber);
+    JS_Abort(Reason.Size, Reason.Contents, File.Size, File.Contents, Func.Size, Func.Contents, LineNumber);
 }
 
-#define Assert(Condition) if(Unlikely(!(Condition))) JS_Abort(S("Assertion failed: " #Condition), S(__FILE__), __LINE__)
+#define Assert(Condition) if(Unlikely(!(Condition))) Abort(S("Assertion failed: " #Condition))
+#define Abort(Reason) JS_Abort(Reason, S(__FILE__), S(__FUNCTION__), __LINE__)
+
+#define InvalidDefaultCase default: Abort(S("Invalid default case hit!"))
+#define NotImplemented Abort(S("Not implemented!"))
+
 
 function void JS_Log(string String)
 {
@@ -139,7 +143,7 @@ function void Mirror(string String)
     }
 }
 
-function string U32ToAscii_Dec(string *Dest, u32 Value)
+function string U64ToAscii_Dec(string *Dest, u64 Value)
 {
     string Result = *Dest;
 
@@ -158,7 +162,30 @@ function string U32ToAscii_Dec(string *Dest, u32 Value)
     return Result;
 }
 
-function string U32ToAscii_Hex(string *Dest, u32 Value)
+
+function string S64ToAscii_Dec(string *Dest, s64 Value)
+{
+    bool Negative = Value < 0;
+
+    if(Negative)
+    {
+        Value = -Value;
+        Dest->Contents[0] = '-';
+        Advance(Dest);
+    }
+
+    string Result = U64ToAscii_Dec(Dest, (u64)Value);
+
+    if(Negative)
+    {
+        ++Result.Size;
+        --Result.Contents;
+    }
+
+    return Result;
+}
+
+function string U64ToAscii_Hex(string *Dest, u64 Value)
 {
     string Result = *Dest;
 
@@ -177,6 +204,8 @@ function string U32ToAscii_Hex(string *Dest, u32 Value)
     return Result;
 }
 
+#define Printf(Format, ...) Printf_(S(Format), ## __VA_ARGS__)
+function void Printf_(string Format, ...);
 
 function string FormatText_(string DestInit, string Format, va_list Args)
 {
@@ -218,13 +247,58 @@ function string FormatText_(string DestInit, string Format, va_list Args)
                 case 'u':
                 {
                     u32 Value = va_arg(Args, u32);
-                    U32ToAscii_Dec(&Dest, Value);
+                    U64ToAscii_Dec(&Dest, Value);
                 } break;
 
                 case 'x':
                 {
                     u32 Value = va_arg(Args, u32);
-                    U32ToAscii_Hex(&Dest, Value);
+                    U64ToAscii_Hex(&Dest, Value);
+                } break;
+
+                case 'i':
+                case 'd':
+                {
+                    s32 Value = va_arg(Args, s32);
+                    S64ToAscii_Dec(&Dest, Value);
+                } break;
+
+                case 'B': // binary/bits
+                {
+                    u32 Value = va_arg(Args, u32);
+                    for(int i = 31; i >= 0; --i)
+                    {
+                        Put(Value & (1 << i) ? '1' : '0');
+                    }
+                } break;
+
+                case 'f':
+                {
+                    NotImplemented;
+
+                    // TODO(robin): NaN, denormals, etc
+                    f64 Value = va_arg(Args, f64);
+                    u64 Bits = *(u64 *)&Value;
+
+                    u64 MantissaMask = (((u64)1 << 52) - 1); 
+                    u64 ExponentMask = (((u64)1 << 10) - 1); // TODO(robin): Last bit is assumed to be 1;
+
+                    u64 Mantissa = Bits & MantissaMask;
+                    u64 Exponent = (Bits >> 52) & ExponentMask;
+                    u64 Sign = Bits & ((u64)1 << 63);
+
+                    u64 Upper = Mantissa >> Exponent;
+                    u64 Lower = Mantissa & (((u64)1 << (Exponent+1)) - 1);
+
+                    if(Sign)
+                    {
+                        Put('-');
+                    }
+
+                    U64ToAscii_Dec(&Dest, Upper);
+                    Put('.');
+                    U64ToAscii_Dec(&Dest, Lower);
+
                 } break;
 
                 case 'S':
@@ -234,6 +308,8 @@ function string FormatText_(string DestInit, string Format, va_list Args)
                     MemoryCopy(Dest.Contents, String->Contents, Count);
                     Advance(&Dest, Count);
                 } break;
+
+                InvalidDefaultCase;
             }
         }
     }
@@ -255,7 +331,6 @@ function string FormatText_(string Dest, string Format, ...)
     return Result;
 }
 
-#define Printf(Format, ...) Printf_(S(Format), ## __VA_ARGS__)
 function void Printf_(string Format, ...)
 {
     char Buf[128];
@@ -663,7 +738,7 @@ function m4x4 Translation(f32 x, f32 y, f32 z)
     };
 }
 
-function m4x4 MatrixAsColumns(v3 X, v3 Y, v3 Z)
+function m4x4 MatrixAsRows(v3 X, v3 Y, v3 Z)
 {
     return
     {
@@ -673,7 +748,7 @@ function m4x4 MatrixAsColumns(v3 X, v3 Y, v3 Z)
          {  0,   0,   0, 1}}
     };
 }
-function m4x4 MatrixAsRows(v3 X, v3 Y, v3 Z)
+function m4x4 MatrixAsColumns(v3 X, v3 Y, v3 Z)
 {
     return
     {
@@ -725,7 +800,7 @@ function m4x4_inv
 CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
 {
     m4x4_inv Result;
-    Result.Forward = MatrixAsColumns(X, Y, Z);
+    Result.Forward = MatrixAsRows(X, Y, Z);
     v3 Translate = -1.0f * (Result.Forward * Position);
     Result.Forward.E[0][3] += Translate.x;
     Result.Forward.E[1][3] += Translate.y;
@@ -736,7 +811,7 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     v3 InvZ = Z / LengthSquared(Z);
 
     Result.Inverse = MatrixAsColumns(InvX, InvY, InvZ);
-    v3 InvP = MatrixAsRows(InvX, InvY, InvZ) * Position;
+    v3 InvP = MatrixAsColumns(InvX, InvY, InvZ) * Translate;
 
     Result.Inverse.E[0][3] -= InvP.x;
     Result.Inverse.E[1][3] -= InvP.y;

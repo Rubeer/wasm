@@ -224,15 +224,16 @@ R"raw(  #version 300 es
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
 
-    //glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
-
-
 }
 
 
-export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
+export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 MouseX, f32 MouseY)
 {
+    v2 MousePixels = v2{MouseX, MouseY};
+    v2 RenderDim = v2{(f32)Width, (f32)Height};
+
     State.VertexCount = 0;
     State.IndexCount = 0;
 
@@ -247,17 +248,19 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
         v[i] = SmoothCurve010(t[i]);
     }
-    v3 CameraP = {-3 + 6*v[0], -15, 2 + 1*v[1]};
+    v3 CameraP = {-3 + 6*v[0], -15, 2 + 1*v[2]};
+    //v3 CameraP = {0, -1, 10};
 
     v3 Up = {0, 0, 1};
 
     v3 CameraZ = Normalize(CameraP);
+    //v3 CameraZ = Normalize(v3{0.2f,-1,0.2f});
     v3 CameraX = Normalize(Cross(Up, CameraZ));
     v3 CameraY = Cross(CameraZ, CameraX);
     m4x4_inv Camera = CameraTransform(CameraX, CameraY, CameraZ, CameraP);
 
     f32 NearClip = 0.1f;
-    f32 FarClip = 100.0f;
+    f32 FarClip = 1000.0f;
     f32 FocalLength = 1.0f;
     m4x4_inv Projection = PerspectiveProjectionTransform(Width, Height, NearClip, FarClip, FocalLength);
 
@@ -268,12 +271,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glUseProgram(OpenGL->Program);
     glUniformMatrix4fv(OpenGL->Projection, true, &Transform);
 
+#if 1
     random_state Random = DefaultSeed();
 
     s32 MinX = -100;
     s32 MaxX =  100;
     s32 MinY = -14;
-    s32 MaxY =  1000;
+    s32 MaxY =  200;
 
     for(s32 y = MinY; y < MaxY; ++y)
     {
@@ -300,7 +304,25 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             PushBox(P, Dim);
         }
     }
+#endif
 
+
+    m4x4 InverseTransform = Camera.Inverse*Projection.Inverse;
+
+    v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
+    MouseClipSpace.y = -MouseClipSpace.y;
+
+    f32 Distance = 5.0f;
+    v4 FromCamera = {0,0,0,1};
+    FromCamera.xyz = CameraP - Distance*CameraZ;
+    v4 FromCameraClip = Transform * FromCamera;
+
+    v4 ClipPos;
+    ClipPos.xy = MouseClipSpace * FromCameraClip.w;
+    ClipPos.zw = FromCameraClip.zw;
+
+    v3 MouseWorldPos = (InverseTransform * ClipPos).xyz;
+    PushBox(MouseWorldPos, v3{2,2,2});
 
     FlushDrawBuffers();
 }

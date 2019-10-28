@@ -17,6 +17,9 @@
     var GLObjects = new Array();
     const ASCIIDecoder = new TextDecoder("ascii");
 
+    var MouseX = null;
+    var MouseY = null;
+
     function GetWasmString(Length, Pointer)
     {
         const Data = Memory.subarray(Pointer, Pointer+Length);
@@ -37,11 +40,13 @@
 
     Imports.JS_Abort = function(ReasonLength, ReasonPtr,
                                 FileNameLength, FileNamePtr,
+                                FuncNameLength, FuncNamePtr,
                                 LineNumber)
     {
         const Reason = GetWasmString(ReasonLength, ReasonPtr);
         const FileName = GetWasmString(FileNameLength, FileNamePtr);
-        const Message = FileName + ":" + LineNumber + ": " + Reason;
+        const FuncName = GetWasmString(FuncNameLength, FuncNamePtr);
+        const Message = "ABORT: in function: " + FuncName + " (" + FileName + ":" + LineNumber + "): " + Reason;
         document.body.innerHTML = "<pre>" + Message + "</pre>";
         throw new Error(Message);
     }
@@ -173,13 +178,21 @@
             const Ratio = window.devicePixelRatio;
             const Width = window.innerWidth;
             const Height = window.innerHeight;
-            gl.canvas.width = Width;
-            gl.canvas.height = Height;
+            Canvas.width = Width;
+            Canvas.height = Height;
             gl.viewport(0, 0, Width, Height);
             console.log("Resize");
 
         }
         window.addEventListener('resize', Resize);
+
+        function MouseMove(Event)
+        {
+            const Rect = Canvas.getBoundingClientRect();
+            MouseX = Event.clientX - Rect.left;
+            MouseY = Event.clientY - Rect.top;
+        }
+        Canvas.addEventListener("mousemove", MouseMove);
 
         gl = Canvas.getContext("webgl2");
         if(!gl)
@@ -200,7 +213,9 @@
             window.requestAnimationFrame(RenderLoop);
             gl.clearColor(0.3, 0.3, 0.3, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
+            var Rect = gl.canvas.getBoundingClientRect();
+
+            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001, MouseX, MouseY);
         }
 
         Resize();
