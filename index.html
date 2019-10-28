@@ -4,7 +4,7 @@
     <meta charset="utf-8">
 </head>
 
-<style> body{ margin: 0; overflow: hidden; } </style>
+<style> body{ margin: 0; overflow: hidden; font-family: monospace;} </style>
 <canvas id="canvas_webgl"> </canvas>
 
 <script>
@@ -36,12 +36,13 @@
     }
 
     Imports.JS_Abort = function(ReasonLength, ReasonPtr,
-                               FileNameLength, FileNamePtr,
-                               LineNumber)
+                                FileNameLength, FileNamePtr,
+                                LineNumber)
     {
         const Reason = GetWasmString(ReasonLength, ReasonPtr);
         const FileName = GetWasmString(FileNameLength, FileNamePtr);
-        const Message = "main.wasm: ABORT: (" + FileName + ":" + LineNumber + ") " + Reason;
+        const Message = FileName + ":" + LineNumber + ": " + Reason;
+        document.body.innerHTML = "<pre>" + Message + "</pre>";
         throw new Error(Message);
     }
 
@@ -58,7 +59,8 @@
     Imports.glBindBuffer = function(Type, Buffer) { gl.bindBuffer(Type, GLObjects[Buffer]); }
     Imports.glBindVertexArray = function(Arr) { gl.bindVertexArray(GLObjects[Arr]); }
     Imports.glEnableVertexAttribArray = function(Index) { gl.enableVertexAttribArray(Index) };
-    Imports.glDrawArrays = function(DrawMode, First, Count) { gl.drawArrays(DrawMode, First, Count); }
+    Imports.glDrawArrays = function(Mode, First, Count) { gl.drawArrays(Mode, First, Count); }
+    Imports.glDrawElements = function(Mode, Count, Type, Offset) { gl.drawElements(Mode, Count, Type, Offset); }
     Imports.glEnable = function(Mode) { gl.enable(Mode); }
     Imports.glDisable = function(Mode) { gl.disable(Mode); }
 
@@ -121,11 +123,14 @@
     function CompileShader(Type, SourceLen, SourcePtr)
     {
         const Shader = gl.createShader(Type);
-        gl.shaderSource(Shader, GetWasmString(SourceLen, SourcePtr));
+        const Source = GetWasmString(SourceLen, SourcePtr);
+        gl.shaderSource(Shader, Source);
         gl.compileShader(Shader);
         if(!gl.getShaderParameter(Shader, gl.COMPILE_STATUS))
         {
-            throw new Error(gl.getShaderInfoLog(Shader));
+            const Message = gl.getShaderInfoLog(Shader);
+            document.body.innerHTML = "<b><pre>" + Message + "</pre></b><pre>" + "\n\n" + Source + "</pre>";
+            throw new Error(Message);
         }
         return Shader;
     }
@@ -142,7 +147,9 @@
         gl.deleteShader(Frag);
         if(!gl.getProgramParameter(Program, gl.LINK_STATUS))
         {
-            throw new Error(gl.getProgramInfoLog(Program));
+            const Message = "WebGL link error: " + gl.getProgramInfoLog(Program);
+            document.body.innerHTML = Message;
+            throw new Error(Message);
         }
 
         return PushGLObj(Program);

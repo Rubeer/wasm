@@ -9,12 +9,12 @@ mkdir -p $DIR/bin
 pushd $DIR/bin > /dev/null
 
 # We turn on ALL warnings and selectively turn off the ones we don't like.
-warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-writable-strings -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-extra-semi-stmt -Wno-gnu-zero-variadic-macro-arguments -Wno-zero-as-null-pointer-constant -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-missing-braces -Wno-unused-template -Wno-unused-function"
+warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-writable-strings -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-extra-semi-stmt -Wno-gnu-zero-variadic-macro-arguments -Wno-zero-as-null-pointer-constant -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-missing-braces -Wno-unused-template -Wno-unused-function -Wno-padded"
 # Turn off dumb "features" (maybe redundant when compiling bare wasm)
 make_cpp_dumb="-fno-exceptions -fno-rtti -fno-threadsafe-statics -fwrapv"
 
 # Translate C++ to LLVM bytecode
-clang -c -emit-llvm -Ofast -ffast-math --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
+clang -c -emit-llvm -O2 -ffast-math --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
 
 if [[ $? -eq 0 ]]
 then

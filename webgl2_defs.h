@@ -1,9 +1,12 @@
 
 #define GL_FLOAT                          0x1406
 #define GL_UNSIGNED_BYTE                  0x1401
+#define GL_UNSIGNED_SHORT                 0x1403
+#define GL_UNSIGNED_INT                   0x1405
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
 #define GL_STREAM_DRAW                    0x88E0
 #define GL_DYNAMIC_DRAW                   0x88E8
 #define GL_DEPTH_BUFFER_BIT               0x00000100
@@ -74,6 +77,7 @@ import_from_js GLuint glGetUniformLocation (GLuint Program, u32 NameLength, char
 import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 *Data);
 
 import_from_js void glDrawArrays(GLenum mode, GLint first, GLsizei count);
+import_from_js void glDrawElements(GLenum mode, GLsizei count, GLenum type, GLintptr offset);
 
 
 

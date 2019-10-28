@@ -19,63 +19,98 @@ struct vertex
 struct opengl
 {
     GLuint VertexBuffer;
-    GLuint VertexArray;
-    GLuint Program;
+    GLuint IndexBuffer;
 
+    GLuint VertexArray;
+
+    GLuint Program;
     // Uniforms
     GLuint Projection;
 };
+
 
 struct state
 {
     opengl OpenGL;
 
     u32 VertexCount;
-    vertex Vertices[1 << 21];
+    u32 IndexCount;
+    vertex Vertices[1 << 16];
+    u16 Indices[ArrayCount(Vertices)*6*6];
 };
 
 global state State;
 
-function void PushQuad(vertex V0,
-                       vertex V1,
-                       vertex V2,
-                       vertex V3)
+function void
+FlushDrawBuffers()
 {
-    vertex *Verts = State.Vertices + State.VertexCount;
-    State.VertexCount += 6;
+    opengl *OpenGL = &State.OpenGL;
 
+    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(State.Vertices[0]), State.Vertices);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OpenGL->IndexBuffer);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, State.IndexCount*sizeof(State.Indices[0]), State.Indices);
+
+    glDrawElements(GL_TRIANGLES, State.IndexCount, GL_UNSIGNED_SHORT, 0);
+
+    State.IndexCount = 0;
+    State.VertexCount = 0;
+}
+
+
+struct target_vertices_indices
+{
+    vertex *V;
+    u16 *I;
+    u16 FirstIndex;
+};
+
+function target_vertices_indices
+AllocateVerticesAndIndices(u32 RequestedVertexCount, u32 RequestedIndexCount)
+{
+    if(State.VertexCount + RequestedVertexCount >= ArrayCount(State.Vertices) ||
+       State.IndexCount + RequestedIndexCount >= ArrayCount(State.Indices)) 
+    {
+        FlushDrawBuffers();
+    }
+
+    target_vertices_indices Target;
+    Target.V = State.Vertices + State.VertexCount;
+    Target.I = State.Indices + State.IndexCount;
+    Target.FirstIndex = (u16)State.VertexCount;
+
+    State.VertexCount += RequestedVertexCount;
+    State.IndexCount += RequestedIndexCount;
+
+    return Target;
+}
+
+function void PushQuadIndices(target_vertices_indices *Target,
+                               u16 V0, u16 V1,
+                               u16 V2, u16 V3)
+{
 //       0 _____1
 //        |   /|
 //        |  / |
 //        | /  |
 //        |/_ _|
 //       2      3
-    // TOOD(robin): Index buffer
-    Verts[0] = V0;
-    Verts[1] = V2;
-    Verts[2] = V1;
 
-    Verts[3] = V2;
-    Verts[4] = V3;
-    Verts[5] = V1;
+    Target->I[0] = Target->FirstIndex + V0;
+    Target->I[1] = Target->FirstIndex + V2;
+    Target->I[2] = Target->FirstIndex + V1;
+
+    Target->I[3] = Target->FirstIndex + V2;
+    Target->I[4] = Target->FirstIndex + V3;
+    Target->I[5] = Target->FirstIndex + V1;
+
+    Target->I += 6;
 }
 
-function void PushQuad(v3 P0, u32 C0,
-                       v3 P1, u32 C1,
-                       v3 P2, u32 C2,
-                       v3 P3, u32 C3)
-{
-    PushQuad(vertex{P0,C0},
-             vertex{P1,C1},
-             vertex{P2,C2},
-             vertex{P3,C3});
-}
 
-function void PushBox(v3 P, v3 Dim)
+function void PushBox(v3 Pos, v3 Dim)
 {
-    f32 dx = Dim.x * 0.5f;
-    f32 dy = Dim.y * 0.5f;
-    f32 dz = Dim.z * 0.5f;
 
 //		   .4------5     4------5     4------5     4------5     4------5.
 //		 .' |    .'|    /|     /|     |      |     |\     |\    |`.    | `.
@@ -85,34 +120,40 @@ function void PushBox(v3 P, v3 Dim)
 //		|.'    | .'    |/     |/      |      |      \|     \|    `. |   `. |
 //		2------3'      2------3       2------3       2------3      `2------3
 //
-    vertex V0, V1, V2, V3, V4, V5, V6, V7;
 
-    V0.P = P + v3{-dx,-dy, dz};
-    V1.P = P + v3{ dx,-dy, dz};
-    V2.P = P + v3{-dx,-dy,-dz};
-    V3.P = P + v3{ dx,-dy,-dz};
+    target_vertices_indices Target = AllocateVerticesAndIndices(8, 6*6);
 
-    V4.P = P + v3{-dx, dy, dz};
-    V5.P = P + v3{ dx, dy, dz};
-    V6.P = P + v3{-dx, dy,-dz};
-    V7.P = P + v3{ dx, dy,-dz};
+    // TODO(robin): Triangle strip?
 
-    V0.C = Red;
-    V1.C = Green;
-    V2.C = Blue;
-    V3.C = White;
-    V4.C = Red;
-    V5.C = Green;
-    V6.C = Blue;
-    V7.C = White;
+    v3 HalfDim = Dim*0.5f;
+    v3 n = Pos - HalfDim;
+    v3 p = Pos + HalfDim;
 
-    // TOOD(robin): Index buffer
-    PushQuad(V0, V1, V2, V3); // Front
-    PushQuad(V1, V5, V3, V7); // Right
-    PushQuad(V4, V0, V6, V2); // Left
-    PushQuad(V4, V5, V0, V1); // Top
-    PushQuad(V2, V3, V6, V7); // Bottom
-    PushQuad(V5, V4, V7, V6); // Back
+    Target.V[0].P = {n.x, n.y, p.z};
+    Target.V[1].P = {p.x, n.y, p.z};
+    Target.V[2].P = {n.x, n.y, n.z};
+    Target.V[3].P = {p.x, n.y, n.z};
+
+    Target.V[4].P = {n.x, p.y, p.z};
+    Target.V[5].P = {p.x, p.y, p.z};
+    Target.V[6].P = {n.x, p.y, n.z};
+    Target.V[7].P = {p.x, p.y, n.z};
+
+    Target.V[0].C = Red;
+    Target.V[1].C = Green;
+    Target.V[2].C = Blue;
+    Target.V[3].C = White;
+    Target.V[4].C = Red;
+    Target.V[5].C = Green;
+    Target.V[6].C = Blue;
+    Target.V[7].C = White;
+
+    PushQuadIndices(&Target, 0, 1, 2, 3); // Front
+    PushQuadIndices(&Target, 1, 5, 3, 7); // Right
+    PushQuadIndices(&Target, 4, 0, 6, 2); // Left
+    PushQuadIndices(&Target, 4, 5, 0, 1); // Top
+    PushQuadIndices(&Target, 2, 3, 6, 7); // Bottom
+    PushQuadIndices(&Target, 5, 4, 7, 6); // Back
 }
 
 
@@ -120,7 +161,6 @@ export_to_js void InitOpenGL()
 {
     string Vert = S(
 R"raw(  #version 300 es
-        
         layout (location=0) in vec3 Position;
         layout (location=1) in vec4 Color;
         
@@ -169,18 +209,22 @@ R"raw(  #version 300 es
 
     OpenGL->VertexBuffer = glCreateBuffer();
     glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, ArrayCount(State.Vertices)*sizeof(vertex), 0, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(State.Vertices), 0, GL_STREAM_DRAW);
+
+    OpenGL->IndexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OpenGL->IndexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(State.Indices), 0, GL_STREAM_DRAW);
 
     OpenGL->VertexArray = glCreateVertexArray();
     glBindVertexArray(OpenGL->VertexArray);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT,         false, sizeof(vertex), (void *)OffsetOf(vertex, P));
+    glVertexAttribPointer(0, 3, GL_FLOAT,        false, sizeof(vertex), (void *)OffsetOf(vertex, P));
 
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
 
-    glEnable(GL_CULL_FACE);
+    //glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
 
@@ -190,8 +234,7 @@ R"raw(  #version 300 es
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
     State.VertexCount = 0;
-
-    //PushBox(v3{0,0,v*0.3f}, v3{5,5,5});
+    State.IndexCount = 0;
 
     static f32 t[4] = {0, 0.15f, 0.415f, 0.865f};
     f32 v[4];
@@ -204,55 +247,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
         v[i] = SmoothCurve010(t[i]);
     }
-
-
-    random_state Random = DefaultSeed();
-
-    s32 MinX = -50;
-    s32 MaxX =  50;
-    s32 MinY = -14;
-    s32 MaxY =  50;
-
-    s32 VertsPerBox = 6*6;
-    s32 TotalVerts = VertsPerBox * (MaxX - MinX) * (MaxY - MinY);
-    Assert(State.VertexCount + (u32)TotalVerts < ArrayCount(State.Vertices));
-
-    v3 LookAt = {};
-
-    for(s32 y = MinY; y < MaxY; ++y)
-    {
-        for(s32 x = MinX; x < MaxX; ++x)
-        {
-            //
-            // NOTE(robin): Should normally use instanced rendering, but this is just a test
-            //
-
-            v3 P;
-            P.x = (f32)x;
-            P.y = (f32)y;
-            P.z = 1.5f*v[0]*RandomBilateral(&Random);
-
-            v3 NormalDim = v3{0.8f, 0.8f, 0.8f};
-
-            v3 WeirdDim = v3{0.2f, 0.2f, 0.2f};
-            WeirdDim.x += 0.7f*RandomUnilateral(&Random);
-            WeirdDim.y += 0.7f*RandomUnilateral(&Random);
-            WeirdDim.z += 0.7f*RandomUnilateral(&Random);
-
-            v3 Dim = Lerp(NormalDim, v[0], WeirdDim);
-
-            PushBox(P, Dim);
-
-            if(x == 0 && y == -10) LookAt = P;
-        }
-    }
-
-
     v3 CameraP = {-3 + 6*v[0], -15, 2 + 1*v[1]};
 
     v3 Up = {0, 0, 1};
 
-    v3 CameraZ = Normalize(CameraP - LookAt);
+    v3 CameraZ = Normalize(CameraP);
     v3 CameraX = Normalize(Cross(Up, CameraZ));
     v3 CameraY = Cross(CameraZ, CameraX);
     m4x4_inv Camera = CameraTransform(CameraX, CameraY, CameraZ, CameraP);
@@ -265,16 +264,45 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     m4x4 Transform = Projection.Forward * Camera.Forward;
 
     opengl *OpenGL = &State.OpenGL;
-
-    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(vertex), State.Vertices);
-
     glBindVertexArray(OpenGL->VertexArray);
-
     glUseProgram(OpenGL->Program);
     glUniformMatrix4fv(OpenGL->Projection, true, &Transform);
 
-    glDrawArrays(GL_TRIANGLES, 0, State.VertexCount);
+    random_state Random = DefaultSeed();
+
+    s32 MinX = -100;
+    s32 MaxX =  100;
+    s32 MinY = -14;
+    s32 MaxY =  1000;
+
+    for(s32 y = MinY; y < MaxY; ++y)
+    {
+        for(s32 x = MinX; x < MaxX; ++x)
+        {
+            //
+            // NOTE(robin): Should normally use instanced rendering, but this is just a test
+            //
+
+            v3 P;
+            P.x = (f32)x;
+            P.y = (f32)y;
+            P.z = 1.5f*v[0]*RandomBilateral(&Random) + v[0]*RandomBilateral(&Random) * 0.3f * (14.0f + P.y);
+
+            v3 NormalDim = v3{0.8f, 0.8f, 0.8f};
+
+            v3 WeirdDim = v3{0.2f, 0.2f, 0.2f};
+            WeirdDim.x += 0.7f*RandomUnilateral(&Random);
+            WeirdDim.y += 0.7f*RandomUnilateral(&Random);
+            WeirdDim.z += 0.7f*RandomUnilateral(&Random);
+
+            v3 Dim = Lerp(NormalDim, v[0], WeirdDim);
+
+            PushBox(P, Dim);
+        }
+    }
+
+
+    FlushDrawBuffers();
 }
 
 
