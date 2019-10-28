@@ -9,12 +9,12 @@ global constexpr u32 Red    = 0xFF0000FF;
 global constexpr u32 Green  = 0xFF00FF00;
 global constexpr u32 Blue   = 0xFFFF0000;
 
+
 struct vertex
 {
     v3 P;
     u32 C;
 };
-
 
 struct opengl
 {
@@ -237,19 +237,24 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
     State.VertexCount = 0;
     State.IndexCount = 0;
 
-    static f32 t[4] = {0, 0.15f, 0.415f, 0.865f};
-    f32 v[4];
-    for(size i = 0; i < ArrayCount(t); ++i)
+    local_persist f32 Anim[4] = {0, 0.15f, 0.415f, 0.865f};
+    f32 Curve[ArrayCount(Anim)];
+    for(size i = 0; i < ArrayCount(Anim); ++i)
     {
-        t[i] += DeltaTime*0.1f;
-        if(t[i] >= 1.0f)
+        if(Anim[i] >= 1.0f)
         {
-            t[i] = 0.0f;
+            Anim[i] = 0.0f;
         }
-        v[i] = SmoothCurve010(t[i]);
+        Curve[i] = SmoothCurve010(Anim[i]);
+        Anim[i] += DeltaTime*0.1f;
     }
-    v3 CameraP = {-3 + 6*v[0], -15, 2 + 1*v[2]};
-    //v3 CameraP = {0, -1, 10};
+
+    v3 CameraP =
+    {
+        -3 + 6*Curve[0],
+        -15,
+        2 + 1*Curve[2],
+    };
 
     v3 Up = {0, 0, 1};
 
@@ -264,12 +269,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
     f32 FocalLength = 1.0f;
     m4x4_inv Projection = PerspectiveProjectionTransform(Width, Height, NearClip, FarClip, FocalLength);
 
-    m4x4 Transform = Projection.Forward * Camera.Forward;
+    m4x4 RenderTransform = Projection.Forward * Camera.Forward;
+    m4x4 InverseRenderTransform = Camera.Inverse*Projection.Inverse;
 
     opengl *OpenGL = &State.OpenGL;
     glBindVertexArray(OpenGL->VertexArray);
     glUseProgram(OpenGL->Program);
-    glUniformMatrix4fv(OpenGL->Projection, true, &Transform);
+    glUniformMatrix4fv(OpenGL->Projection, true, &RenderTransform);
 
 #if 1
     random_state Random = DefaultSeed();
@@ -290,7 +296,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
             v3 P;
             P.x = (f32)x;
             P.y = (f32)y;
-            P.z = 1.5f*v[0]*RandomBilateral(&Random) + v[0]*RandomBilateral(&Random) * 0.3f * (14.0f + P.y);
+            P.z = 1.5f*Curve[0]*RandomBilateral(&Random);
+            P.z += Curve[0]*RandomBilateral(&Random) * 0.3f * (14.0f + P.y);
 
             v3 NormalDim = v3{0.8f, 0.8f, 0.8f};
 
@@ -299,7 +306,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
             WeirdDim.y += 0.7f*RandomUnilateral(&Random);
             WeirdDim.z += 0.7f*RandomUnilateral(&Random);
 
-            v3 Dim = Lerp(NormalDim, v[0], WeirdDim);
+            v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
 
             PushBox(P, Dim);
         }
@@ -307,7 +314,6 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
 #endif
 
 
-    m4x4 InverseTransform = Camera.Inverse*Projection.Inverse;
 
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
     MouseClipSpace.y = -MouseClipSpace.y;
@@ -315,13 +321,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
     f32 Distance = 5.0f;
     v4 FromCamera = {0,0,0,1};
     FromCamera.xyz = CameraP - Distance*CameraZ;
-    v4 FromCameraClip = Transform * FromCamera;
+    v4 FromCameraClip = RenderTransform * FromCamera;
 
     v4 ClipPos;
     ClipPos.xy = MouseClipSpace * FromCameraClip.w;
     ClipPos.zw = FromCameraClip.zw;
 
-    v3 MouseWorldPos = (InverseTransform * ClipPos).xyz;
+    v3 MouseWorldPos = (InverseRenderTransform * ClipPos).xyz;
     PushBox(MouseWorldPos, v3{2,2,2});
 
     FlushDrawBuffers();
