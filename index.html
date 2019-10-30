@@ -17,9 +17,6 @@
     var GLObjects = new Array();
     const ASCIIDecoder = new TextDecoder("ascii");
 
-    var MouseX = null;
-    var MouseY = null;
-
     function GetWasmString(Length, Pointer)
     {
         const Data = Memory.subarray(Pointer, Pointer+Length);
@@ -186,13 +183,33 @@
         }
         window.addEventListener('resize', Resize);
 
-        function MouseMove(Event)
+        Canvas.addEventListener("mousemove", Event =>
         {
             const Rect = Canvas.getBoundingClientRect();
-            MouseX = Event.clientX - Rect.left;
-            MouseY = Event.clientY - Rect.top;
-        }
-        Canvas.addEventListener("mousemove", MouseMove);
+            const MouseX = Event.clientX - Rect.left;
+            const MouseY = Event.clientY - Rect.top;
+            Functions.MouseMove(MouseX, MouseY);
+        });
+
+        Canvas.addEventListener("mousedown", Event =>
+        {
+            Functions.MouseLeft(true);
+        });
+
+        Canvas.addEventListener("mouseup", Event =>
+        {
+            Functions.MouseLeft(false);
+        });
+
+        window.addEventListener("keydown", Event =>
+        {
+            Functions.KeyPress(Event.keyCode, true);
+        });
+
+        window.addEventListener("keyup", Event =>
+        {
+            Functions.KeyPress(Event.keyCode, false);
+        });
 
         gl = Canvas.getContext("webgl2");
         if(!gl)
@@ -201,6 +218,7 @@
             document.body.innerHTML = Message;
             throw Error(Message);
         }
+
 
         Functions.InitOpenGL();
 
@@ -215,7 +233,7 @@
             gl.clear(gl.COLOR_BUFFER_BIT);
             var Rect = gl.canvas.getBoundingClientRect();
 
-            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001, MouseX, MouseY);
+            Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
         }
 
         Resize();

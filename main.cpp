@@ -9,6 +9,45 @@ global constexpr u32 Red    = 0xFF0000FF;
 global constexpr u32 Green  = 0xFF00FF00;
 global constexpr u32 Blue   = 0xFFFF0000;
 
+struct button
+{
+    u32 HalfTransitionCount;
+    bool EndedDown;
+};
+
+struct user_input
+{
+    v2 MousePosPixels;
+    button MouseLeft;
+    button MouseRight;
+    button Keys[256];
+};
+
+global user_input UserInput;
+
+export_to_js void MouseMove(s32 X, s32 Y)
+{
+    UserInput.MousePosPixels = {(f32)X, (f32)Y};
+}
+
+function void AddButtonTransition(button *Button, bool EndedDown)
+{
+    Button->EndedDown = EndedDown;
+    Button->HalfTransitionCount++;
+}
+
+export_to_js void MouseLeft(bool EndedDown)
+{
+    AddButtonTransition(&UserInput.MouseLeft, EndedDown);
+}
+
+export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
+{
+    if(KeyCode < ArrayCount(UserInput.Keys))
+    {
+        AddButtonTransition(&UserInput.Keys[KeyCode], EndedDown);
+    }
+}
 
 struct vertex
 {
@@ -37,6 +76,8 @@ struct state
     u32 IndexCount;
     vertex Vertices[1 << 16];
     u16 Indices[ArrayCount(Vertices)*6*6];
+
+    v3 LastMouseWorldP;
 };
 
 global state State;
@@ -229,13 +270,16 @@ R"raw(  #version 300 es
 }
 
 
-export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 MouseX, f32 MouseY)
+export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
-    v2 MousePixels = v2{MouseX, MouseY};
-    v2 RenderDim = v2{(f32)Width, (f32)Height};
-
     State.VertexCount = 0;
     State.IndexCount = 0;
+
+    v2 MousePixels = UserInput.MousePosPixels;
+    v2 RenderDim = v2{(f32)Width, (f32)Height};
+    v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
+    MouseClipSpace.y = -MouseClipSpace.y;
+
 
     local_persist f32 Anim[4] = {0, 0.15f, 0.415f, 0.865f};
     f32 Curve[ArrayCount(Anim)];
@@ -253,7 +297,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
     {
         -3 + 6*Curve[0],
         -15,
-        2 + 1*Curve[2],
+        2 + 2*Curve[2],
     };
 
     v3 Up = {0, 0, 1};
@@ -277,11 +321,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
     glUseProgram(OpenGL->Program);
     glUniformMatrix4fv(OpenGL->Projection, true, &RenderTransform);
 
-#if 1
     random_state Random = DefaultSeed();
 
-    s32 MinX = -100;
-    s32 MaxX =  100;
+    s32 MinX = -50;
+    s32 MaxX =  50;
     s32 MinY = -14;
     s32 MaxY =  200;
 
@@ -311,24 +354,42 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime, f32 Mous
             PushBox(P, Dim);
         }
     }
-#endif
 
 
 
-    v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
-    MouseClipSpace.y = -MouseClipSpace.y;
+    local_persist f32 Distance = 5.0f;
+    {
+        button *K = UserInput.Keys;
+        if(K['W'].EndedDown)
+        {
+            Distance += 0.1f;
+        }
+        if(K['S'].EndedDown)
+        {
+            Distance -= 0.1f;
+        }
+    }
 
-    f32 Distance = 5.0f;
-    v4 FromCamera = {0,0,0,1};
-    FromCamera.xyz = CameraP - Distance*CameraZ;
-    v4 FromCameraClip = RenderTransform * FromCamera;
 
-    v4 ClipPos;
-    ClipPos.xy = MouseClipSpace * FromCameraClip.w;
-    ClipPos.zw = FromCameraClip.zw;
+    v3 MouseWorldP = {};
+    {
 
-    v3 MouseWorldPos = (InverseRenderTransform * ClipPos).xyz;
-    PushBox(MouseWorldPos, v3{2,2,2});
+        v4 FromCamera = {0,0,0,1};
+        FromCamera.xyz = CameraP - Distance*CameraZ;
+        v4 FromCameraClip = RenderTransform * FromCamera;
+
+        v4 ClipPos;
+        ClipPos.xy = MouseClipSpace * FromCameraClip.w;
+        ClipPos.zw = FromCameraClip.zw;
+
+        MouseWorldP = (InverseRenderTransform * ClipPos).xyz;
+    }
+
+
+    State.LastMouseWorldP = MouseWorldP;
+
+
+    PushBox(MouseWorldP, v3{2,2,2});
 
     FlushDrawBuffers();
 }

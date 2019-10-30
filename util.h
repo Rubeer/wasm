@@ -301,6 +301,17 @@ function string FormatText_(string DestInit, string Format, va_list Args)
 
                 } break;
 
+                case 'c':
+                {
+                    int Value = va_arg(Args, int);
+
+                    if(Dest.Size)
+                    {
+                        Dest.Contents[0] = (char)Value;
+                        Advance(&Dest);
+                    }
+                } break;
+
                 case 'S':
                 {
                     string *String = va_arg(Args, string *);
@@ -819,7 +830,6 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
 
     return Result;
 }
-
 
 
 //
