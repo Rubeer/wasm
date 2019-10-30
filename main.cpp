@@ -1,7 +1,10 @@
 
 
 #include "util.h"
+#include "math.h"
 #include "webgl2_defs.h"
+
+#include "main.h"
 
 global constexpr u32 White  = 0xFFFFFFFF;
 global constexpr u32 Black  = 0xFF000000;
@@ -9,21 +12,10 @@ global constexpr u32 Red    = 0xFF0000FF;
 global constexpr u32 Green  = 0xFF00FF00;
 global constexpr u32 Blue   = 0xFFFF0000;
 
-struct button
-{
-    u32 HalfTransitionCount;
-    bool EndedDown;
-};
 
-struct user_input
-{
-    v2 MousePosPixels;
-    button MouseLeft;
-    button MouseRight;
-    button Keys[256];
-};
-
+global state State;
 global user_input UserInput;
+
 
 export_to_js void MouseMove(s32 X, s32 Y)
 {
@@ -49,38 +41,7 @@ export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
     }
 }
 
-struct vertex
-{
-    v3 P;
-    u32 C;
-};
 
-struct opengl
-{
-    GLuint VertexBuffer;
-    GLuint IndexBuffer;
-
-    GLuint VertexArray;
-
-    GLuint Program;
-    // Uniforms
-    GLuint Projection;
-};
-
-
-struct state
-{
-    opengl OpenGL;
-
-    u32 VertexCount;
-    u32 IndexCount;
-    vertex Vertices[1 << 16];
-    u16 Indices[ArrayCount(Vertices)*6*6];
-
-    v3 LastMouseWorldP;
-};
-
-global state State;
 
 function void
 FlushDrawBuffers()
@@ -302,7 +263,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     v3 Up = {0, 0, 1};
 
-    v3 CameraZ = Normalize(CameraP);
+    local_persist v3 CameraZ = Normalize(CameraP);
     //v3 CameraZ = Normalize(v3{0.2f,-1,0.2f});
     v3 CameraX = Normalize(Cross(Up, CameraZ));
     v3 CameraY = Cross(CameraZ, CameraX);
@@ -313,13 +274,14 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     f32 FocalLength = 1.0f;
     m4x4_inv Projection = PerspectiveProjectionTransform(Width, Height, NearClip, FarClip, FocalLength);
 
-    m4x4 RenderTransform = Projection.Forward * Camera.Forward;
-    m4x4 InverseRenderTransform = Camera.Inverse*Projection.Inverse;
+    m4x4_inv RenderTransform;
+    RenderTransform.Forward = Projection.Forward * Camera.Forward;
+    RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
 
     opengl *OpenGL = &State.OpenGL;
     glBindVertexArray(OpenGL->VertexArray);
     glUseProgram(OpenGL->Program);
-    glUniformMatrix4fv(OpenGL->Projection, true, &RenderTransform);
+    glUniformMatrix4fv(OpenGL->Projection, true, &RenderTransform.Forward);
 
     random_state Random = DefaultSeed();
 
@@ -376,18 +338,21 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
         v4 FromCamera = {0,0,0,1};
         FromCamera.xyz = CameraP - Distance*CameraZ;
-        v4 FromCameraClip = RenderTransform * FromCamera;
+        v4 FromCameraClip = RenderTransform.Forward * FromCamera;
 
         v4 ClipPos;
         ClipPos.xy = MouseClipSpace * FromCameraClip.w;
         ClipPos.zw = FromCameraClip.zw;
 
-        MouseWorldP = (InverseRenderTransform * ClipPos).xyz;
+        MouseWorldP = (RenderTransform.Inverse * ClipPos).xyz;
     }
 
 
+#if 0
+    if(UserInput.MouseLeft.EndedDown)
+        CameraZ = Normalize(CameraZ + (MouseWorldP - State.LastMouseWorldP));
     State.LastMouseWorldP = MouseWorldP;
-
+#endif
 
     PushBox(MouseWorldP, v3{2,2,2});
 
