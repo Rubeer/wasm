@@ -263,7 +263,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     v3 Up = {0, 0, 1};
 
-    local_persist v3 CameraZ = Normalize(CameraP);
+    v3 CameraZ = Normalize(CameraP);
     //v3 CameraZ = Normalize(v3{0.2f,-1,0.2f});
     v3 CameraX = Normalize(Cross(Up, CameraZ));
     v3 CameraY = Cross(CameraZ, CameraX);

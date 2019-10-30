@@ -13,9 +13,29 @@
     let Imports = {};
     Imports.memory = new WebAssembly.Memory({initial:MemoryPageCount});
     const Memory = new Uint8Array(Imports.memory.buffer);
-    var gl = null;
-    var GLObjects = new Array();
+    let gl = null;
+    let GLObjects = new Array();
     const ASCIIDecoder = new TextDecoder("ascii");
+
+    let FontAtlasPixels = null;
+    let FontAtlasGeom = null;
+
+    async function LoadImageAsRawPixels(FileName)
+    {
+        let Img = new Image();
+        Img.src = FileName;
+        await Img.decode();
+
+        let DummyCanvas = document.createElement("canvas");
+        let Context = DummyCanvas.getContext("2d");
+        Context.drawImage(Img, 0, 0);
+
+        let Data = Context.getImageData(0, 0, Img.width, Img.height).data;
+
+        DummyCanvas.remove();
+        return Data;
+    }
+
 
     function GetWasmString(Length, Pointer)
     {
@@ -160,11 +180,17 @@
 
     async function Init()
     {
+        FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png");
+        FontAtlasGeom = await fetch("font_atlas_signed_distance_field.geom");
+        FontAtlasGeom = await FontAtlasGeom.arrayBuffer();
+        FontAtlasPixels = await FontAtlasPixels;
+
         const Program = await WebAssembly.instantiateStreaming(
             fetch("main.wasm"),
             {"env":Imports}
         );
 
+        console.log(Program.instance.exports);
         const Functions = Program.instance.exports;
 
 
