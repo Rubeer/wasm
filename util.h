@@ -411,7 +411,7 @@ function void *PushSize(memory_arena *Memory, size RequestedSize, arena_push_fla
     return (void *)Result;
 }
 
-function void Clear(memory_arena *Memory)
+function void Reset(memory_arena *Memory)
 {
 	Memory->Used = 0;
 }

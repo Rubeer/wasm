@@ -76,6 +76,11 @@ union v3
         v2 xy;
         f32 IgnoreZ_;
     };
+    struct
+    {
+        f32 IgnoreX_;
+        v2 yz;
+    };
 
     f32 E[3];
 };

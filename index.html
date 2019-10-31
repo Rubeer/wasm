@@ -28,9 +28,10 @@
 
         let DummyCanvas = document.createElement("canvas");
         let Context = DummyCanvas.getContext("2d");
+
         Context.drawImage(Img, 0, 0);
 
-        let Data = Context.getImageData(0, 0, Img.width, Img.height).data;
+        let Data = Context.getImageData(0, 0, Img.width, Img.height).data.buffer;
 
         DummyCanvas.remove();
         return Data;
@@ -85,6 +86,12 @@
     Imports.glDrawElements = function(Mode, Count, Type, Offset) { gl.drawElements(Mode, Count, Type, Offset); }
     Imports.glEnable = function(Mode) { gl.enable(Mode); }
     Imports.glDisable = function(Mode) { gl.disable(Mode); }
+    Imports.glCreateTexture = function() { return PushGLObj(gl.createTexture()); }
+    Imports.glBindTexture = function(Target, Texture) { gl.bindTexture(Target, GLObjects[Texture]); }
+    Imports.glGenerateMipmap = function(Target) { gl.generateMipmap(Target); }
+    Imports.glTexParameteri = function(Target, Var, Value) { gl.texParameteri(Target, Var, Value); }
+    Imports.glActiveTexture = function(Texture) { gl.activeTexture(Texture); }
+    Imports.glUniform1i = function(Location, Value) { gl.uniform1i(GLObjects[Location], Value); }
 
     Imports.glGetUniformLocation = function(Program, NameLen, NamePtr)
     {
@@ -142,6 +149,15 @@
         gl.bufferSubData(Target, Offset, Data);
     }
 
+    Imports.glTexImage2D = function(Target, Level, InternalFormat, Width, Height, Border, Format, Type, DataPtr, DataSize, Offset)
+    {
+        const Data = Memory.subarray(DataPtr, DataPtr + DataSize);
+        gl.texImage2D(Target, Level, InternalFormat, Width, Height, Border, Format, Type, Data, Offset);
+    }
+
+
+
+
     function CompileShader(Type, SourceLen, SourcePtr)
     {
         const Shader = gl.createShader(Type);
@@ -177,24 +193,34 @@
         return PushGLObj(Program);
     }
 
+    Imports.JS_GetFontAtlas = function(PixelsPtr, PixelsSize, GeomPtr, GeomSize)
+    {
+        if(PixelsSize != FontAtlasPixels.byteLength)
+            throw Error("Invalid font atlas pixel buffer size, got :"+PixelsSize+",  expected "+FontAtlasPixels.byteLength);
+        if(GeomSize != FontAtlasGeom.byteLength)
+            throw Error("Invalid font atlas geom buffer size, got :"+GeomSize+",  expected "+FontAtlasGeom.byteLength);
+
+        new Uint8Array(Memory.buffer, PixelsPtr, PixelsSize).set(new Uint8Array(FontAtlasPixels, 0, PixelsSize));
+        new Uint8Array(Memory.buffer, GeomPtr, GeomSize).set(new Uint8Array(FontAtlasGeom, 0, GeomSize));
+    }
+
 
     async function Init()
     {
+        let Program = WebAssembly.instantiateStreaming(fetch("main.wasm"), {"env":Imports});
+
         FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png");
         FontAtlasGeom = await fetch("font_atlas_signed_distance_field.geom");
         FontAtlasGeom = await FontAtlasGeom.arrayBuffer();
         FontAtlasPixels = await FontAtlasPixels;
 
-        const Program = await WebAssembly.instantiateStreaming(
-            fetch("main.wasm"),
-            {"env":Imports}
-        );
-
-        console.log(Program.instance.exports);
+        Program = await Program;
         const Functions = Program.instance.exports;
 
+        console.log(FontAtlasPixels);
+        console.log(FontAtlasGeom);
 
-        var Canvas = document.getElementById("canvas_webgl");
+        let Canvas = document.getElementById("canvas_webgl");
 
         function Resize()
         {
@@ -240,24 +266,24 @@
         gl = Canvas.getContext("webgl2");
         if(!gl)
         {
-            var Message = "WebGL 2 context could not be acquired";
+            let Message = "WebGL 2 context could not be acquired";
             document.body.innerHTML = Message;
             throw Error(Message);
         }
 
 
-        Functions.InitOpenGL();
+        Functions.Init();
 
-        var Prev = null;
+        let Prev = null;
         function RenderLoop(Now)
         {
-            var DeltaTime = Prev ? Now - Prev : Now;
+            let DeltaTime = Prev ? Now - Prev : Now;
             Prev = Now;
 
             window.requestAnimationFrame(RenderLoop);
             gl.clearColor(0.3, 0.3, 0.3, 1);
             gl.clear(gl.COLOR_BUFFER_BIT);
-            var Rect = gl.canvas.getBoundingClientRect();
+            let Rect = gl.canvas.getBoundingClientRect();
 
             Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
         }

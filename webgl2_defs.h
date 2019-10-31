@@ -34,6 +34,18 @@
 #define GL_DEPTH_TEST                     0x0B71
 #define GL_TEXTURE0                       0x84C0
 #define GL_CULL_FACE                      0x0B44
+#define GL_TEXTURE_2D                     0x0DE1
+#define GL_TEXTURE_MIN_FILTER             0x2801
+#define GL_TEXTURE_MAG_FILTER             0x2800
+#define GL_NEAREST_MIPMAP_NEAREST         0x2700
+#define GL_LINEAR_MIPMAP_NEAREST          0x2701
+#define GL_NEAREST_MIPMAP_LINEAR          0x2702
+#define GL_LINEAR_MIPMAP_LINEAR           0x2703
+#define GL_NEAREST                        0x2600
+#define GL_LINEAR                         0x2601
+#define GL_R8                             0x8229
+#define GL_RED                            0x1903
+#define GL_BLEND                          0x0BE2
 
 typedef float GLfloat;
 typedef float GLclampf;
@@ -75,11 +87,17 @@ import_from_js void glEnableVertexAttribArray (GLuint index);
 import_from_js void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 import_from_js GLuint glGetUniformLocation (GLuint Program, u32 NameLength, char *NamePtr);
 import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 *Data);
+import_from_js void glUniform1i (GLint location, GLint v0);
 
 import_from_js void glDrawArrays(GLenum mode, GLint first, GLsizei count);
 import_from_js void glDrawElements(GLenum mode, GLsizei count, GLenum type, GLintptr offset);
 
-
+import_from_js void glTexImage2D (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, void *DataPtr, size DataSize, size Offset);
+import_from_js GLuint glCreateTexture();
+import_from_js void glTexParameteri (GLenum target, GLenum pname, GLint param);
+import_from_js void glBindTexture (GLenum target, GLuint texture);
+import_from_js void glGenerateMipmap (GLenum target);
+import_from_js void glActiveTexture (GLenum texture);
 
 
 function GLuint glGetUniformLocation(GLuint Program, string Name)
@@ -88,5 +106,9 @@ function GLuint glGetUniformLocation(GLuint Program, string Name)
 }
 
 import_from_js GLuint JS_GL_CreateCompileAndLinkProgram(u32 VertLen, char *VertSrc, u32 FragLen, char *FragSrc);
+function GLuint JS_GL_CreateCompileAndLinkProgram(string Vert, string Frag)
+{
+    return JS_GL_CreateCompileAndLinkProgram(Vert.Size, Vert.Contents, Frag.Size, Frag.Contents);
+}
 
 

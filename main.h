@@ -16,24 +16,60 @@ struct user_input
 struct vertex
 {
     v3 P;
+    v2 UV;
     u32 C;
 };
 
-struct opengl
+#define FONT_GLYPH_SIZE 32
+#pragma pack(push, 1)
+struct font_atlas_char_packed
+{
+    u8 MinX;
+    u8 MinY;
+    u8 MaxX;
+    u8 MaxY;
+
+    s8 OffX;
+    s8 OffY;
+    s8 Advance;
+};
+#pragma pack(pop)
+
+struct font_atlas_char
+{
+    v2 Min;
+    v2 Max;
+    v2 Offset;
+    float Advance;
+};
+
+struct font_atlas
+{
+    GLuint Texture;
+    GLuint Program;
+    GLuint TextureSampler;
+    GLuint Transform;
+    font_atlas_char Geometry[256];
+};
+
+struct renderer
 {
     GLuint VertexBuffer;
     GLuint IndexBuffer;
 
     GLuint VertexArray;
+    GLuint FontTexture;
 
     GLuint Program;
     // Uniforms
-    GLuint Projection;
+    GLuint Transform;
+
+    font_atlas FontAtlas;
 };
 
 struct state
 {
-    opengl OpenGL;
+    renderer Renderer;
 
     u32 VertexCount;
     u32 IndexCount;

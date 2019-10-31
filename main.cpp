@@ -16,7 +16,6 @@ global constexpr u32 Blue   = 0xFFFF0000;
 global state State;
 global user_input UserInput;
 
-
 export_to_js void MouseMove(s32 X, s32 Y)
 {
     UserInput.MousePosPixels = {(f32)X, (f32)Y};
@@ -41,17 +40,66 @@ export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
     }
 }
 
+#if 1
 
+global u8 __FrameMemory[1024*1024*8];
+global memory_arena FrameMemory = MemoryArenaFromByteArray(__FrameMemory);
+
+import_from_js void JS_GetFontAtlas(void *Pixels, size PixelsSize, void *Geometry, size GeomSize);
+
+function void LoadFontAtlas(memory_arena *Memory, font_atlas *FontAtlas)
+{
+    u32 Width = 256;
+    u32 Height = 256;
+    u32 PixelCount = Width*Height;
+
+    size PixelsSize = PixelCount*4;
+    size GeomPackedSize = sizeof(font_atlas_char_packed) * 256;
+
+    auto Pixels = (u8 *)PushSize(Memory, PixelsSize, ArenaFlag_NoClear);
+    auto GeomPacked = (font_atlas_char_packed *)PushSize(Memory, GeomPackedSize, ArenaFlag_NoClear);
+
+    JS_GetFontAtlas(Pixels, PixelsSize, GeomPacked, GeomPackedSize);
+
+    // TODO(robin): Benchmark if it isn't faster to just use the packed data as-is,
+    // converting to float at runtime instead of ahead of time.
+    for(u32 i = 0; i < 256; ++i)
+    {
+        font_atlas_char_packed C = GeomPacked[i];
+        FontAtlas->Geometry[i].Min     = {(float)C.MinX, (float)C.MinY};
+        FontAtlas->Geometry[i].Max     = {(float)C.MaxX, (float)C.MaxY};
+        FontAtlas->Geometry[i].Offset  = {(float)C.OffX, (float)C.OffY};
+        FontAtlas->Geometry[i].Advance = (float)C.Advance;
+    }
+
+    u32 *Pixels32 = (u32 *)Pixels;
+    u8 *Pixels8 = (u8 *)Pixels;
+    for(u32 i = 0; i < PixelCount; ++i)
+    {
+        // NOTE(robin): Only want the Alpha channel (the rest is all 255 anyway)
+        Pixels8[i] = (u8)(Pixels32[i] >> 24);
+    }
+
+    FontAtlas->Texture = glCreateTexture();
+    glBindTexture(GL_TEXTURE_2D, FontAtlas->Texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Width, Height, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize, 0);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+#endif
 
 function void
 FlushDrawBuffers()
 {
-    opengl *OpenGL = &State.OpenGL;
+    renderer *Renderer = &State.Renderer;
 
-    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, Renderer->VertexBuffer);
     glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(State.Vertices[0]), State.Vertices);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OpenGL->IndexBuffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, State.IndexCount*sizeof(State.Indices[0]), State.Indices);
 
     glDrawElements(GL_TRIANGLES, State.IndexCount, GL_UNSIGNED_SHORT, 0);
@@ -158,76 +206,174 @@ function void PushBox(v3 Pos, v3 Dim)
     PushQuadIndices(&Target, 5, 4, 7, 6); // Back
 }
 
-
-export_to_js void InitOpenGL()
+function void
+PushText(renderer *Renderer, v3 Pos, string Text, f32 Scale = 1.0f)
 {
-    string Vert = S(
-R"raw(  #version 300 es
-        layout (location=0) in vec3 Position;
-        layout (location=1) in vec4 Color;
-        
-        out vec4 VertColor;
+    f32 TextAdvance = 0.0f;
+    f32 UVScale = (1.0f / 256.0f);
 
-        uniform mat4 Projection;
+    font_atlas_char *Geometry = Renderer->FontAtlas.Geometry;
 
-        void main()
-        {
-            VertColor = Color;
-            gl_Position = Projection*vec4(Position, 1.0f);
-        }
-    )raw");
+    target_vertices_indices Target = AllocateVerticesAndIndices(Text.Size*4, Text.Size*6);
 
-    string Frag = S(
-R"raw(  #version 300 es
-        precision highp float;
-        
-        in vec4 VertColor;
-        out vec4 FragColor;
+    for(size i = 0; i < Text.Size; ++i)
+    {
+        font_atlas_char Char = Geometry[(u8)Text.Contents[i]];
+        v2 Min = v2{TextAdvance, 0} + Char.Offset;
+        v2 Dim = Char.Max - Char.Min;
 
-        vec3 LinearToSRGB_Approx(vec3 x)
-        {
-            // NOTE(robin): The GPU has dedicated hardware to do this but we can't access that in WebGL..
-            // https://mimosa-pudica.net/fast-gamma/
-            vec3 a = vec3(0.00279491f);
-            vec3 b = vec3(1.15907984f);
-            vec3 c = vec3(0.157664895f);
-            vec3 Result = (b * inversesqrt(x + a) - c) * x;
-            return Result;
-        }
+        v3 n = Pos + v3{Min.x, 0, -Min.y};
+        v3 p = n   + v3{Dim.x, 0, Dim.y};
 
-        void main()
-        {
-            FragColor = VertColor;
-            FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
-        }
-    )raw");
+        Target.V[0].P = {n.x, n.y, p.z};
+        Target.V[1].P = {p.x, n.y, p.z};
+        Target.V[2].P = {n.x, n.y, n.z};
+        Target.V[3].P = {p.x, n.y, n.z};
 
-    opengl *OpenGL = &State.OpenGL;
+        v2 UVMin = Char.Min * UVScale;
+        v2 UVMax = Char.Max * UVScale;
 
-    OpenGL->Program = JS_GL_CreateCompileAndLinkProgram(Vert.Size, Vert.Contents,
-                                                       Frag.Size, Frag.Contents);
+        Target.V[0].UV = UVMin;
+        Target.V[1].UV = {UVMax.x, UVMin.y};
+        Target.V[2].UV = {UVMin.x, UVMax.y};
+        Target.V[3].UV = UVMax;
 
-    OpenGL->Projection = glGetUniformLocation(OpenGL->Program, S("Projection"));
+        Target.V[0].C = Red;
+        Target.V[1].C = Green;
+        Target.V[2].C = Blue;
+        Target.V[3].C = White;
 
-    OpenGL->VertexBuffer = glCreateBuffer();
-    glBindBuffer(GL_ARRAY_BUFFER, OpenGL->VertexBuffer);
+        PushQuadIndices(&Target, 0, 1, 2, 3);
+
+        Target.V += 4;
+        Target.FirstIndex += 4;
+
+        TextAdvance += Char.Advance;
+    }
+}
+
+export_to_js void Init()
+{
+    renderer *Renderer = &State.Renderer;
+
+    string ShaderHeader = S(R"HereDoc(#version 300 es
+precision highp float;
+vec3 LinearToSRGB_Approx(vec3 x)
+{
+    // NOTE(robin): The GPU has dedicated hardware to do this but we can't access that in WebGL..
+    // https://mimosa-pudica.net/fast-gamma/
+    vec3 a = vec3(0.00279491f);
+    vec3 b = vec3(1.15907984f);
+    vec3 c = vec3(0.157664895f);
+    vec3 Result = (b * inversesqrt(x + a) - c) * x;
+    return Result;
+})HereDoc");
+
+
+
+    string Vert = Concat(&FrameMemory, ShaderHeader, S(R"HereDoc(
+layout (location=0) in vec3 Position;
+layout (location=1) in vec2 UV;
+layout (location=2) in vec4 Color;
+
+out vec4 VertColor;
+
+uniform mat4 Transform;
+
+void main()
+{
+    VertColor = Color;
+    gl_Position = Transform*vec4(Position, 1.0f);
+})HereDoc"));
+
+
+
+    string Frag = Concat(&FrameMemory, ShaderHeader, S(R"HereDoc(
+
+in vec4 VertColor;
+out vec4 FragColor;
+
+void main()
+{
+    FragColor = VertColor;
+    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+})HereDoc"));
+
+    Renderer->Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
+    Renderer->Transform = glGetUniformLocation(Renderer->Program, S("Transform"));
+
+
+    Vert = Concat(&FrameMemory, ShaderHeader, S(R"HereDoc(
+uniform mat4 Transform;
+
+layout (location = 0) in vec3 Position;
+layout (location = 1) in vec2 UV;
+layout (location = 2) in vec4 Color;
+
+out vec2 VertUV;
+out vec4 VertColor;
+
+void main()
+{
+    VertUV = UV;
+    VertColor = Color;
+    gl_Position = Transform * vec4(Position, 1.0f);
+})HereDoc"));
+
+
+    Frag = Concat(&FrameMemory, ShaderHeader, S(R"HereDoc(
+uniform sampler2D TextureSampler;
+
+in vec2 VertUV;
+in vec4 VertColor;
+
+out vec4 FragColor;
+
+void main()
+{
+    float Smoothing = 1.0/64.0;
+    float Distance = texture(TextureSampler, VertUV).r;
+    float Alpha = smoothstep(0.5f - Smoothing, 0.5f + Smoothing, Distance);
+
+#if 1
+    if(Alpha < 0.01f)
+        discard;
+#endif
+
+    FragColor = vec4(VertColor.rgb, VertColor.a * Alpha);
+    FragColor.rgb = LinearToSRGB_Approx(VertColor.rgb);
+})HereDoc"));
+
+    Renderer->FontAtlas.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
+    Renderer->FontAtlas.Transform = glGetUniformLocation(Renderer->FontAtlas.Program, S("Transform"));
+    Renderer->FontAtlas.TextureSampler = glGetUniformLocation(Renderer->FontAtlas.Program, S("TextureSampler"));
+
+
+    Renderer->VertexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ARRAY_BUFFER, Renderer->VertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, sizeof(State.Vertices), 0, GL_STREAM_DRAW);
 
-    OpenGL->IndexBuffer = glCreateBuffer();
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OpenGL->IndexBuffer);
+    Renderer->IndexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(State.Indices), 0, GL_STREAM_DRAW);
 
-    OpenGL->VertexArray = glCreateVertexArray();
-    glBindVertexArray(OpenGL->VertexArray);
+    Renderer->VertexArray = glCreateVertexArray();
+    glBindVertexArray(Renderer->VertexArray);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT,        false, sizeof(vertex), (void *)OffsetOf(vertex, P));
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
 
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
+    glVertexAttribPointer(1, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
+
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
 
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+
+    LoadFontAtlas(&FrameMemory, &Renderer->FontAtlas);
 }
 
 
@@ -278,10 +424,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     RenderTransform.Forward = Projection.Forward * Camera.Forward;
     RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
 
-    opengl *OpenGL = &State.OpenGL;
-    glBindVertexArray(OpenGL->VertexArray);
-    glUseProgram(OpenGL->Program);
-    glUniformMatrix4fv(OpenGL->Projection, true, &RenderTransform.Forward);
+    renderer *Renderer = &State.Renderer;
+    glBindVertexArray(Renderer->VertexArray);
+    glUseProgram(Renderer->Program);
+    glUniformMatrix4fv(Renderer->Transform, true, &RenderTransform.Forward);
 
     random_state Random = DefaultSeed();
 
@@ -319,16 +465,16 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
 
 
-    local_persist f32 Distance = 5.0f;
+    local_persist f32 Distance = 100.0f;
     {
         button *K = UserInput.Keys;
         if(K['W'].EndedDown)
         {
-            Distance += 0.1f;
+            Distance += Distance*DeltaTime;
         }
         if(K['S'].EndedDown)
         {
-            Distance -= 0.1f;
+            Distance -= Distance*DeltaTime;
         }
     }
 
@@ -354,9 +500,20 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     State.LastMouseWorldP = MouseWorldP;
 #endif
 
-    PushBox(MouseWorldP, v3{2,2,2});
+    //PushBox(MouseWorldP, v3{2,2,2});
+    FlushDrawBuffers();
+
+    glUseProgram(Renderer->FontAtlas.Program);
+    glUniformMatrix4fv(Renderer->FontAtlas.Transform, true, &RenderTransform.Forward);
+    glBindTexture(GL_TEXTURE_2D, Renderer->FontAtlas.Texture);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(Renderer->FontAtlas.TextureSampler, 0);
+
+    PushText(Renderer, MouseWorldP, S("ABCDEF 10"), 1.0f);
 
     FlushDrawBuffers();
+
+    Reset(&FrameMemory);
 }
 
 
