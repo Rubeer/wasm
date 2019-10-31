@@ -46,6 +46,11 @@
 #define GL_R8                             0x8229
 #define GL_RED                            0x1903
 #define GL_BLEND                          0x0BE2
+#define GL_FUNC_ADD                       0x8006
+#define GL_FUNC_REVERSE_SUBTRACT          0x800B
+#define GL_FUNC_SUBTRACT                  0x800A
+#define GL_ZERO                           0
+#define GL_ONE                            1
 
 typedef float GLfloat;
 typedef float GLclampf;
@@ -62,6 +67,9 @@ typedef void GLvoid;
 
 import_from_js void glDisable (GLenum cap);
 import_from_js void glEnable (GLenum cap);
+
+import_from_js void glBlendFunc(GLenum sfactor, GLenum dfactor);
+import_from_js void glBlendEquation (GLenum mode);
 
 import_from_js void glClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
 import_from_js void glClear(GLbitfield mask);

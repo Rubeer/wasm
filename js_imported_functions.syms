@@ -9,6 +9,9 @@ glDisable
 glClear
 glClearColor
 
+glBlendFunc
+glBlendEquation
+
 glShaderSource
 glCreateShader
 glCompileShader

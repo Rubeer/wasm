@@ -260,6 +260,10 @@ function m4x4 Scale(f32 x, f32 y, f32 z)
          {0,0,0,1}}
     };
 }
+function m4x4 Scale(f32 x)
+{
+    return Scale(x,x,x);
+}
 
 function m4x4 Translation(f32 x, f32 y, f32 z)
 {
@@ -353,3 +357,15 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
 
     return Result;
 }
+
+// TODO(robin): Maybe just use a 4x3 matrix..
+struct object_transform
+{
+    v3 X;
+    v3 Y;
+    v3 Z;
+    v3 Offset;
+};
+
+global constexpr object_transform DefaultXForm = {{1,0,0}, {0,1,0}, {0,0,1}, {0,0,0}};
+

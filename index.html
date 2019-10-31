@@ -29,6 +29,8 @@
         let DummyCanvas = document.createElement("canvas");
         let Context = DummyCanvas.getContext("2d");
 
+        DummyCanvas.width = Img.width;
+        DummyCanvas.height = Img.height;
         Context.drawImage(Img, 0, 0);
 
         let Data = Context.getImageData(0, 0, Img.width, Img.height).data.buffer;
@@ -72,6 +74,8 @@
     
     Imports.glClear = function(Mask) { gl.clear(Mask); }
     Imports.glClearColor = function(R, G, B, A) { gl.clearColor(R, G, B, A); }
+    Imports.glBlendFunc = function(SourceFactor, DestFactor) { gl.blendFunc(SourceFactor, DestFactor); }
+    Imports.glBlendEquation = function(Mode) { gl.blendEquation(Mode); }
     Imports.glCreateShader = function(Type) { return PushGLObj(gl.createShader(Type)); }
     Imports.glCreateProgram = function() { return PushGLObj(gl.createProgram()); }
     Imports.glAttachShader = function(Program, Shader) { gl.attachShader(GLObjects[Program], GLObjects[Shader]); }

@@ -341,7 +341,7 @@ function string FormatText_(string DestInit, string Format, va_list Args)
 #undef Put
 }
 
-#define FormatText(Dest, Format, ...) FormatText_(Dest, S(Format), ## __VA_ARGS__)
+#define FormatText(Dest, Format, ...) FormatText_(WrapBuf(Dest), S(Format), ## __VA_ARGS__)
 function string FormatText_(string Dest, string Format, ...)
 {
     va_list Args;

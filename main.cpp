@@ -66,10 +66,13 @@ function void LoadFontAtlas(memory_arena *Memory, font_atlas *FontAtlas)
     for(u32 i = 0; i < 256; ++i)
     {
         font_atlas_char_packed C = GeomPacked[i];
-        FontAtlas->Geometry[i].Min     = {(float)C.MinX, (float)C.MinY};
-        FontAtlas->Geometry[i].Max     = {(float)C.MaxX, (float)C.MaxY};
-        FontAtlas->Geometry[i].Offset  = {(float)C.OffX, (float)C.OffY};
-        FontAtlas->Geometry[i].Advance = (float)C.Advance;
+        font_atlas_char *Char = FontAtlas->Geometry + i;
+
+        Char->Min     = {(f32)C.MinX, (f32)C.MinY};
+        Char->Max     = {(f32)C.MaxX, (f32)C.MaxY};
+        Char->Offset  = {(f32)C.OffX, (f32)C.OffY};
+        Char->Advance = (f32)C.Advance;
+        Char->Offset.y = -(Char->Offset.y + Char->Max.y - Char->Min.y); // NOTE(robin): Flip Y
     }
 
     u32 *Pixels32 = (u32 *)Pixels;
@@ -207,7 +210,7 @@ function void PushBox(v3 Pos, v3 Dim)
 }
 
 function void
-PushText(renderer *Renderer, v3 Pos, string Text, f32 Scale = 1.0f)
+PushText(renderer *Renderer, object_transform *XForm, string Text)
 {
     f32 TextAdvance = 0.0f;
     f32 UVScale = (1.0f / 256.0f);
@@ -219,16 +222,18 @@ PushText(renderer *Renderer, v3 Pos, string Text, f32 Scale = 1.0f)
     for(size i = 0; i < Text.Size; ++i)
     {
         font_atlas_char Char = Geometry[(u8)Text.Contents[i]];
-        v2 Min = v2{TextAdvance, 0} + Char.Offset;
         v2 Dim = Char.Max - Char.Min;
+        v2 Min = v2{TextAdvance, 0} + Char.Offset;;
 
-        v3 n = Pos + v3{Min.x, 0, -Min.y};
-        v3 p = n   + v3{Dim.x, 0, Dim.y};
+        v3 n = XForm->X*Min.x + XForm->Y*Min.y + XForm->Offset;
+        v3 p = XForm->X*Dim.x + XForm->Y*Dim.y + n;
 
-        Target.V[0].P = {n.x, n.y, p.z};
-        Target.V[1].P = {p.x, n.y, p.z};
-        Target.V[2].P = {n.x, n.y, n.z};
-        Target.V[3].P = {p.x, n.y, n.z};
+        v3 SortBias = XForm->Y*Dim.y*0.01f;
+
+        Target.V[0].P = v3{n.x, n.y, p.z};
+        Target.V[1].P = v3{p.x, n.y, p.z} + SortBias;
+        Target.V[2].P = v3{n.x, n.y, n.z} + SortBias*2;
+        Target.V[3].P = v3{p.x, n.y, n.z} + SortBias*3;
 
         v2 UVMin = Char.Min * UVScale;
         v2 UVMax = Char.Max * UVScale;
@@ -331,17 +336,20 @@ out vec4 FragColor;
 
 void main()
 {
-    float Smoothing = 1.0/64.0;
     float Distance = texture(TextureSampler, VertUV).r;
+    vec2 Derivative = vec2(dFdx(Distance), dFdy(Distance));
+
+    float Smoothing = 0.5f*length(Derivative);
     float Alpha = smoothstep(0.5f - Smoothing, 0.5f + Smoothing, Distance);
 
-#if 1
+#if 0
     if(Alpha < 0.01f)
         discard;
 #endif
 
-    FragColor = vec4(VertColor.rgb, VertColor.a * Alpha);
+    FragColor = vec4(VertColor.rgb, VertColor.a*Alpha);
     FragColor.rgb = LinearToSRGB_Approx(VertColor.rgb);
+    FragColor.rgb *= FragColor.a;
 })HereDoc"));
 
     Renderer->FontAtlas.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
@@ -372,6 +380,8 @@ void main()
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
+    //glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     LoadFontAtlas(&FrameMemory, &Renderer->FontAtlas);
 }
@@ -465,7 +475,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
 
 
-    local_persist f32 Distance = 100.0f;
+    local_persist f32 Distance = 10.0f;
     {
         button *K = UserInput.Keys;
         if(K['W'].EndedDown)
@@ -509,7 +519,15 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(Renderer->FontAtlas.TextureSampler, 0);
 
-    PushText(Renderer, MouseWorldP, S("ABCDEF 10"), 1.0f);
+
+    local_persist u32 Things = 0;
+    char Buf[32];
+    string Text = FormatText(Buf, "%u things", Things++);
+
+    f32 s = 1.0f/32;
+    //object_transform XForm = {{s,0,0}, {0,0,s}, {0,s,0}, MouseWorldP};
+    object_transform XForm = {{s,0,0}, {0,0,s}, {0,s,0}, MouseWorldP};
+    PushText(Renderer, &XForm, Text);
 
     FlushDrawBuffers();
 
