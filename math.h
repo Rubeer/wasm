@@ -1,7 +1,17 @@
 
+global constexpr f32 Pi32 = 3.14159265359f;
+
 function f32 Square(f32 V) { return V*V; }
+
+function s32 AbsoluteValue(s32 V) { return __builtin_abs(V); };
+
 function f32 SquareRoot(f32 V) { return __builtin_sqrtf(V); }
-function s32 Abs(s32 V) { return __builtin_abs(V); }
+function f32 AbsoluteValue(f32 V) { return __builtin_fabsf(V); };
+function f32 Floor(f32 V) { return __builtin_floorf(V); };
+function f32 Ceil(f32 V) { return __builtin_ceilf(V); };
+
+// TODO(robin): Convince llvm to use the wasm "f32.nearest" instruction here.. (it actually tries linking with roundf if you use __builtin_roundf)
+function f32 Round(f32 V) { return Floor(V + 0.5f); };
 
 function f32 SmoothCurve010(f32 x)
 {
@@ -202,12 +212,24 @@ struct m4x4
 
 };
 
-static constexpr m4x4 IdentityMatrix =
+struct m3x4
+{
+    f32 E[3][4];
+};
+
+global constexpr m4x4 IdentityMatrix4x4 =
 {
     {{1,0,0,0},
      {0,1,0,0},
      {0,0,1,0},
      {0,0,0,1}}
+};
+
+global constexpr m3x4 IdentityMatrix3x4 =
+{
+    {{1,0,0,0},
+     {0,1,0,0},
+     {0,0,1,0}}
 };
 
 struct m4x4_inv
@@ -250,33 +272,68 @@ function v3 operator*(m4x4 const &M, v3 V)
     return Result;
 }
 
-function m4x4 Scale(f32 x, f32 y, f32 z)
+
+
+function m3x4 operator*(m3x4 const &A, m3x4 const &B)
+{
+    m3x4 Result;
+    for(int r = 0; r < 3; ++r)
+    {
+        for(int c = 0; c < 4; ++c)
+        {
+            Result.E[r][c]  = A.E[r][0] * B.E[0][c];
+            Result.E[r][c] += A.E[r][1] * B.E[1][c];
+            Result.E[r][c] += A.E[r][2] * B.E[2][c];
+        }
+        Result.E[r][3] += A.E[r][3];
+    }
+    return Result;
+}
+
+function v3 operator*(m3x4 const &M, v3 V)
+{
+    v3 Result;
+    Result.x = V.x*M.E[0][0] + V.y*M.E[0][1] + V.z*M.E[0][2] + M.E[0][3];
+    Result.y = V.x*M.E[1][0] + V.y*M.E[1][1] + V.z*M.E[1][2] + M.E[1][3];
+    Result.z = V.x*M.E[2][0] + V.y*M.E[2][1] + V.z*M.E[2][2] + M.E[2][3];
+    return Result;
+}
+
+function m3x4 Scaling(f32 x, f32 y, f32 z)
 {
     return
     {
         {{x,0,0,0},
          {0,y,0,0},
-         {0,0,z,0},
-         {0,0,0,1}}
+         {0,0,z,0}}
     };
 }
-function m4x4 Scale(f32 x)
+function m3x4 Scaling(f32 x)
 {
-    return Scale(x,x,x);
+    return Scaling(x,x,x);
+}
+function m3x4 Scaling(v3 V)
+{
+    return Scaling(V.x, V.y, V.z);
 }
 
-function m4x4 Translation(f32 x, f32 y, f32 z)
+function m3x4 Translation(f32 x, f32 y, f32 z)
 {
     return
     {
         {{1,0,0,x},
          {0,1,0,y},
-         {0,0,1,z},
-         {0,0,0,1}}
+         {0,0,1,z}}
     };
 }
 
-function m4x4 MatrixAsRows(v3 X, v3 Y, v3 Z)
+function m3x4 Translation(v3 V)
+{
+    return Translation(V.x, V.y, V.z);
+}
+
+
+function m4x4 MatrixAsRows4x4(v3 X, v3 Y, v3 Z)
 {
     return
     {
@@ -286,7 +343,8 @@ function m4x4 MatrixAsRows(v3 X, v3 Y, v3 Z)
          {  0,   0,   0, 1}}
     };
 }
-function m4x4 MatrixAsColumns(v3 X, v3 Y, v3 Z)
+
+function m4x4 MatrixAsColumns4x4(v3 X, v3 Y, v3 Z)
 {
     return
     {
@@ -295,6 +353,34 @@ function m4x4 MatrixAsColumns(v3 X, v3 Y, v3 Z)
          {X.z, Y.z, Z.z, 0},
          {  0,   0,   0, 1}}
     };
+}
+
+function m3x4 MatrixAsRows3x4(v3 X = {1,0,0}, v3 Y = {0,1,0}, v3 Z = {0,0,1}, v3 P = {})
+{
+    return
+    {
+        {{X.x, X.y, X.z, P.x},
+         {Y.x, Y.y, Y.z, P.y},
+         {Z.x, Z.y, Z.z, P.z}}
+    };
+}
+
+
+function v3 GetXAxis(m3x4 const &M)
+{
+    return {M.E[0][0], M.E[0][1], M.E[0][2]};
+}
+function v3 GetYAxis(m3x4 const &M)
+{
+    return {M.E[1][0], M.E[1][1], M.E[1][2]};
+}
+function v3 GetZAxis(m3x4 const &M)
+{
+    return {M.E[2][0], M.E[2][1], M.E[2][2]};
+}
+function v3 GetTranslation(m3x4 const &M)
+{
+    return {M.E[0][3], M.E[1][3], M.E[2][3]};
 }
 
 function m4x4_inv
@@ -338,7 +424,7 @@ function m4x4_inv
 CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
 {
     m4x4_inv Result;
-    Result.Forward = MatrixAsRows(X, Y, Z);
+    Result.Forward = MatrixAsRows4x4(X, Y, Z);
     v3 Translate = -1.0f * (Result.Forward * Position);
     Result.Forward.E[0][3] += Translate.x;
     Result.Forward.E[1][3] += Translate.y;
@@ -348,8 +434,8 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     v3 InvY = Y / LengthSquared(Y);
     v3 InvZ = Z / LengthSquared(Z);
 
-    Result.Inverse = MatrixAsColumns(InvX, InvY, InvZ);
-    v3 InvP = MatrixAsColumns(InvX, InvY, InvZ) * Translate;
+    Result.Inverse = MatrixAsColumns4x4(InvX, InvY, InvZ);
+    v3 InvP = MatrixAsColumns4x4(InvX, InvY, InvZ) * Translate;
 
     Result.Inverse.E[0][3] -= InvP.x;
     Result.Inverse.E[1][3] -= InvP.y;
@@ -358,14 +444,56 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     return Result;
 }
 
-// TODO(robin): Maybe just use a 4x3 matrix..
-struct object_transform
+function f32 CosineApprox(f32 x)
 {
-    v3 X;
-    v3 Y;
-    v3 Z;
-    v3 Offset;
-};
+    constexpr f32 Normalize = 0.5f / Pi32;
+    x *= Normalize;
+    x -= 0.25f + Floor(x + 0.25f);
+    x *= 16.0f * (AbsoluteValue(x) - 0.5f);
+    x += 0.225f * x * (AbsoluteValue(x) - 1.0f);
+    return x;
+}
 
-global constexpr object_transform DefaultXForm = {{1,0,0}, {0,1,0}, {0,0,1}, {0,0,0}};
+function f32 SineApprox(f32 x)
+{
+    constexpr f32 HalfPi = Pi32/2.0f;
+    f32 Result = CosineApprox(x - HalfPi);
+    return Result;
+}
 
+function m3x4 XRotation(f32 v)
+{
+    f32 s = SineApprox(v);
+    f32 c = CosineApprox(v);
+    m3x4 Result =
+    {
+         {{ 1, 0, 0, 0 },
+          { 0, c,-s, 0 },
+          { 0, s, c, 0 }}
+    };
+    return Result;
+}
+function m3x4 YRotation(f32 v)
+{
+    f32 s = SineApprox(v);
+    f32 c = CosineApprox(v);
+    m3x4 Result =
+    {
+         {{ c, 0, s, 0 },
+          { 0, 1, 0, 0 },
+          {-s, 0, c, 0 }}
+    };
+    return Result;
+}
+function m3x4 ZRotation(f32 v)
+{
+    f32 s = SineApprox(v);
+    f32 c = CosineApprox(v);
+    m3x4 Result =
+    {
+         {{ c,-s, 0, 0 },
+          { s, c, 0, 0 },
+          { 0, 0, 1, 0 }}
+    };
+    return Result;
+}

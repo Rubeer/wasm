@@ -355,7 +355,7 @@ function string FormatText_(string Dest, string Format, ...)
 
 function void Printf_(string Format, ...)
 {
-    char Buf[128];
+    char Buf[256];
     string Dest = {sizeof(Buf), Buf};
 
     va_list Args;

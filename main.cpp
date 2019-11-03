@@ -210,7 +210,7 @@ function void PushBox(v3 Pos, v3 Dim)
 }
 
 function void
-PushText(renderer *Renderer, object_transform *XForm, string Text)
+PushText(renderer *Renderer, string Text, m3x4 const &Transform = IdentityMatrix3x4)
 {
     f32 TextAdvance = 0.0f;
     f32 UVScale = (1.0f / 256.0f);
@@ -219,21 +219,27 @@ PushText(renderer *Renderer, object_transform *XForm, string Text)
 
     target_vertices_indices Target = AllocateVerticesAndIndices(Text.Size*4, Text.Size*6);
 
+    //v3 XAxis = GetXAxis(Transform);
+    //v3 YAxis = GetYAxis(Transform);
+    //v3 ZAxis = GetZAxis(Transform);
+    //v3 Offset = GetTranslation(Transform);
+    //v3 z = XAxis*1000.0f;
+    //Printf("x %d y %d z %d", (s32)z.x, (s32)z.y, (s32)z.z);
+
     for(size i = 0; i < Text.Size; ++i)
     {
         font_atlas_char Char = Geometry[(u8)Text.Contents[i]];
+
+        v2 Min = Char.Offset;
+        Min.x += TextAdvance;
+        TextAdvance += Char.Advance;
         v2 Dim = Char.Max - Char.Min;
-        v2 Min = v2{TextAdvance, 0} + Char.Offset;;
+        v2 Max = Min + Dim;
 
-        v3 n = XForm->X*Min.x + XForm->Y*Min.y + XForm->Offset;
-        v3 p = XForm->X*Dim.x + XForm->Y*Dim.y + n;
-
-        v3 SortBias = XForm->Y*Dim.y*0.01f;
-
-        Target.V[0].P = v3{n.x, n.y, p.z};
-        Target.V[1].P = v3{p.x, n.y, p.z} + SortBias;
-        Target.V[2].P = v3{n.x, n.y, n.z} + SortBias*2;
-        Target.V[3].P = v3{p.x, n.y, n.z} + SortBias*3;
+        Target.V[0].P = Transform * v3{Min.x, 0, Max.y};
+        Target.V[1].P = Transform * v3{Max.x, 0, Max.y};
+        Target.V[2].P = Transform * v3{Min.x, 0, Min.y};
+        Target.V[3].P = Transform * v3{Max.x, 0, Min.y};
 
         v2 UVMin = Char.Min * UVScale;
         v2 UVMax = Char.Max * UVScale;
@@ -246,14 +252,13 @@ PushText(renderer *Renderer, object_transform *XForm, string Text)
         Target.V[0].C = Red;
         Target.V[1].C = Green;
         Target.V[2].C = Blue;
-        Target.V[3].C = White;
+        Target.V[3].C = Black;
 
         PushQuadIndices(&Target, 0, 1, 2, 3);
 
         Target.V += 4;
         Target.FirstIndex += 4;
 
-        TextAdvance += Char.Advance;
     }
 }
 
@@ -265,7 +270,7 @@ export_to_js void Init()
 precision highp float;
 vec3 LinearToSRGB_Approx(vec3 x)
 {
-    // NOTE(robin): The GPU has dedicated hardware to do this but we can't access that in WebGL..
+    // TODO(robin): Automatically disable this if the browser's framebuffer is sRGB!
     // https://mimosa-pudica.net/fast-gamma/
     vec3 a = vec3(0.00279491f);
     vec3 b = vec3(1.15907984f);
@@ -334,21 +339,32 @@ in vec4 VertColor;
 
 out vec4 FragColor;
 
+const float EdgeSmoothAmount = 2.0f; // In pixels
+const vec3 OutlineColor = vec3(0.0f);
+const float BorderThickness = 0.166f;
+
+const float OutlineBegin = 0.5f;
+const float OutlineEnd  = OutlineBegin - BorderThickness;
+
+float SmoothEdge(float Border, float Norm, float Distance)
+{
+    float Smoothing = Border*Norm;
+    float Result = smoothstep(Border - Smoothing, Border + Smoothing, Distance);
+    return Result;
+}
+
 void main()
 {
     float Distance = texture(TextureSampler, VertUV).r;
+
     vec2 Derivative = vec2(dFdx(Distance), dFdy(Distance));
+    float Norm = EdgeSmoothAmount * length(Derivative);
 
-    float Smoothing = 0.5f*length(Derivative);
-    float Alpha = smoothstep(0.5f - Smoothing, 0.5f + Smoothing, Distance);
 
-#if 0
-    if(Alpha < 0.01f)
-        discard;
-#endif
+    vec3 Color = mix(OutlineColor, VertColor.rgb, SmoothEdge(OutlineBegin, Norm, Distance));
 
-    FragColor = vec4(VertColor.rgb, VertColor.a*Alpha);
-    FragColor.rgb = LinearToSRGB_Approx(VertColor.rgb);
+    FragColor = vec4(Color, VertColor.a*SmoothEdge(OutlineEnd, Norm, Distance));
+    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
     FragColor.rgb *= FragColor.a;
 })HereDoc"));
 
@@ -434,10 +450,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     RenderTransform.Forward = Projection.Forward * Camera.Forward;
     RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
 
+
+#if 1
     renderer *Renderer = &State.Renderer;
     glBindVertexArray(Renderer->VertexArray);
     glUseProgram(Renderer->Program);
     glUniformMatrix4fv(Renderer->Transform, true, &RenderTransform.Forward);
+#endif
 
     random_state Random = DefaultSeed();
 
@@ -446,6 +465,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     s32 MinY = -14;
     s32 MaxY =  200;
 
+#if 1
     for(s32 y = MinY; y < MaxY; ++y)
     {
         for(s32 x = MinX; x < MaxX; ++x)
@@ -472,6 +492,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             PushBox(P, Dim);
         }
     }
+#endif
 
 
 
@@ -513,21 +534,24 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     //PushBox(MouseWorldP, v3{2,2,2});
     FlushDrawBuffers();
 
+#if 1
     glUseProgram(Renderer->FontAtlas.Program);
     glUniformMatrix4fv(Renderer->FontAtlas.Transform, true, &RenderTransform.Forward);
     glBindTexture(GL_TEXTURE_2D, Renderer->FontAtlas.Texture);
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(Renderer->FontAtlas.TextureSampler, 0);
+#endif
 
 
     local_persist u32 Things = 0;
     char Buf[32];
-    string Text = FormatText(Buf, "%u things", Things++);
-
+    string Text = FormatText(Buf, "blabla %u", Things++);
     f32 s = 1.0f/32;
-    //object_transform XForm = {{s,0,0}, {0,0,s}, {0,s,0}, MouseWorldP};
-    object_transform XForm = {{s,0,0}, {0,0,s}, {0,s,0}, MouseWorldP};
-    PushText(Renderer, &XForm, Text);
+    f32 Angle = Anim[0]*Pi32*4.0f;
+
+    m3x4 Transform = Translation(MouseWorldP) * YRotation(Angle) * Scaling(s);//MatrixAsRows3x4({s,0,0}, {0,0,s}, {0,s,0});
+
+    PushText(Renderer, Text, Transform);
 
     FlushDrawBuffers();
 

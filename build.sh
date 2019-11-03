@@ -14,21 +14,26 @@ warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-wri
 make_cpp_dumb="-fno-exceptions -fno-rtti -fno-threadsafe-statics -fwrapv"
 
 # Translate C++ to LLVM bytecode
+echo clang
 clang -c -emit-llvm -O2 -ffast-math --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
 
 if [[ $? -eq 0 ]]
 then
 
     # Optimize LLVM bytecode. Maybe redundant, the llc flag should do it too?
+    echo opt
     opt -O3 main.bc -o main.bc
     
     # Compile to WebAssembly
+    echo llc
     llc -O3 -filetype=obj main.bc -o main.o
     
     # Link, add js function imports
+    echo wasm-ld
     wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-dynamic --import-memory --stack-first
 
     # Strip out static variable bloat (zeroes)
+    echo wasm-opt
     wasm-opt -O2 main.wasm -o main.wasm
     
     cp main.wasm /usr/share/nginx/html/
