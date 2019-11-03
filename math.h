@@ -444,6 +444,16 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     return Result;
 }
 
+function f32 SineApprox(f32 x)
+{
+    constexpr f32 Normalize = 0.5f / Pi32;
+    x *= Normalize;
+    x -= 0.5f + Floor(x);
+    x *= 16.0f * (AbsoluteValue(x) - 0.5f);
+    x += 0.225f * x * (AbsoluteValue(x) - 1.0f);
+    return x;
+}
+
 function f32 CosineApprox(f32 x)
 {
     constexpr f32 Normalize = 0.5f / Pi32;
@@ -452,13 +462,6 @@ function f32 CosineApprox(f32 x)
     x *= 16.0f * (AbsoluteValue(x) - 0.5f);
     x += 0.225f * x * (AbsoluteValue(x) - 1.0f);
     return x;
-}
-
-function f32 SineApprox(f32 x)
-{
-    constexpr f32 HalfPi = Pi32/2.0f;
-    f32 Result = CosineApprox(x - HalfPi);
-    return Result;
 }
 
 function m3x4 XRotation(f32 v)
