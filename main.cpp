@@ -164,7 +164,7 @@ function void PushQuadIndices(target_vertices_indices *Target,
 }
 
 
-function void PushBox(m3x4 const &Transform)
+function void PushBox(m3x4 const &Transform, u32 C04 = Red, u32 C15 = Green, u32 C26 = Blue, u32 C37 = White)
 {
 
 //		   .4------5     4------5     4------5     4------5     4------5.
@@ -188,14 +188,14 @@ function void PushBox(m3x4 const &Transform)
     Target.V[6].P = Transform * v3{-1,  1, -1};
     Target.V[7].P = Transform * v3{ 1,  1, -1};
 
-    Target.V[0].C = Red;
-    Target.V[1].C = Green;
-    Target.V[2].C = Blue;
-    Target.V[3].C = White;
-    Target.V[4].C = Red;
-    Target.V[5].C = Green;
-    Target.V[6].C = Blue;
-    Target.V[7].C = White;
+    Target.V[0].C = C04;
+    Target.V[1].C = C15;
+    Target.V[2].C = C26;
+    Target.V[3].C = C37;
+    Target.V[4].C = C04;
+    Target.V[5].C = C15;
+    Target.V[6].C = C26;
+    Target.V[7].C = C37;
 
     // TODO(robin): Triangle strip?
     PushQuadIndices(&Target, 0, 1, 2, 3); // Front
@@ -408,7 +408,7 @@ void main()
     InitDrawBuffer(&State.Text);
     InitDrawBuffer(&State.Default);
 
-    //glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     //glBlendEquation(GL_FUNC_ADD);
@@ -424,8 +424,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     MouseClipSpace.y = -MouseClipSpace.y;
 
 
-    local_persist f32 Anim[4] = {0, 0.15f, 0.415f, 0.865f};
-    f32 Speeds[4] = {0.001f, 0.1f, 0.1f, 0.1f};
+    local_persist f32 Anim[5] = {0, 0.15f, 0.415f, 0.865f, 0};
+    f32 Speeds[ArrayCount(Anim)] = {0.001f, 0.1f, 0.1f, 0.1f, 0.01f};
     f32 Curve[ArrayCount(Anim)];
     for(size i = 0; i < ArrayCount(Anim); ++i)
     {
@@ -497,7 +497,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
         v3 HalfDim = Dim*0.5f;
 
-        m3x4 Rot = XRotationN(RandomUnilateral(&Random) + V + Anim[0]) * 
+        m3x4 Rot = XRotationN(RandomUnilateral(&Random) + V + Anim[2]) * 
                    YRotationN(RandomUnilateral(&Random) + V + Anim[1]) *
                    ZRotationN(RandomUnilateral(&Random) + V + Anim[2]);
 
@@ -519,6 +519,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
     }
 
+    m3x4 PlanetTransform = ZRotationN(Anim[4]+0.61f) * Scaling(10.0f);
+    PushBox(PlanetTransform, 0x40ffffff, 0x80666666, 0xa0444444, 0xff111111);
 
 
     Flush(&State.Default);
