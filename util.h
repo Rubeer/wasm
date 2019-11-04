@@ -47,7 +47,7 @@ typedef buffer string;
 #define S(s) string{sizeof(s)-1,(char *)s}
 #define WrapBuf(b) buffer{sizeof(b),b}
 
-#define import_from_js extern "C" 
+#define import_from_js extern "C"
 #define export_to_js extern "C" __attribute__((visibility("default")))
 
 #define Likely(Condition)   __builtin_expect(!!(Condition), 1)

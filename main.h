@@ -46,35 +46,30 @@ struct font_atlas_char
 struct font_atlas
 {
     GLuint Texture;
-    GLuint Program;
     GLuint TextureSampler;
-    GLuint Transform;
     font_atlas_char Geometry[256];
 };
 
-struct renderer
+struct draw_buffer
 {
-    GLuint VertexBuffer;
-    GLuint IndexBuffer;
-
-    GLuint VertexArray;
-    GLuint FontTexture;
-
     GLuint Program;
-    // Uniforms
     GLuint Transform;
 
-    font_atlas FontAtlas;
+    GLuint VertexBuffer;
+    GLuint VertexArray;
+    GLuint IndexBuffer;
+    u32 VertexCount;
+    u32 IndexCount;
+    vertex Vertices[(1 << 16) - 1];
+    u16 Indices[ArrayCount(Vertices)*6*6];
 };
 
 struct state
 {
-    renderer Renderer;
 
-    u32 VertexCount;
-    u32 IndexCount;
-    vertex Vertices[1 << 16];
-    u16 Indices[ArrayCount(Vertices)*6*6];
+    font_atlas FontAtlas;
 
-    v3 LastMouseWorldP;
+    draw_buffer Default;
+    draw_buffer Text;
 };
+

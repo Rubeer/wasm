@@ -40,7 +40,6 @@ export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
     }
 }
 
-#if 1
 
 global u8 __FrameMemory[1024*1024*8];
 global memory_arena FrameMemory = MemoryArenaFromByteArray(__FrameMemory);
@@ -61,6 +60,8 @@ function void LoadFontAtlas(memory_arena *Memory, font_atlas *FontAtlas)
 
     JS_GetFontAtlas(Pixels, PixelsSize, GeomPacked, GeomPackedSize);
 
+    f32 Scale = 1.0f / 256.0f;
+
     // TODO(robin): Benchmark if it isn't faster to just use the packed data as-is,
     // converting to float at runtime instead of ahead of time.
     for(u32 i = 0; i < 256; ++i)
@@ -68,10 +69,10 @@ function void LoadFontAtlas(memory_arena *Memory, font_atlas *FontAtlas)
         font_atlas_char_packed C = GeomPacked[i];
         font_atlas_char *Char = FontAtlas->Geometry + i;
 
-        Char->Min     = {(f32)C.MinX, (f32)C.MinY};
-        Char->Max     = {(f32)C.MaxX, (f32)C.MaxY};
-        Char->Offset  = {(f32)C.OffX, (f32)C.OffY};
-        Char->Advance = (f32)C.Advance;
+        Char->Min     = Scale * v2{(f32)C.MinX, (f32)C.MinY};
+        Char->Max     = Scale * v2{(f32)C.MaxX, (f32)C.MaxY};
+        Char->Offset  = Scale * v2{(f32)C.OffX, (f32)C.OffY};
+        Char->Advance = Scale * (f32)C.Advance;
         Char->Offset.y = -(Char->Offset.y + Char->Max.y - Char->Min.y); // NOTE(robin): Flip Y
     }
 
@@ -86,29 +87,30 @@ function void LoadFontAtlas(memory_arena *Memory, font_atlas *FontAtlas)
     FontAtlas->Texture = glCreateTexture();
     glBindTexture(GL_TEXTURE_2D, FontAtlas->Texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Width, Height, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize, 0);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+#if 0
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D);
+#endif
 }
 
-#endif
 
 function void
-FlushDrawBuffers()
+Flush(draw_buffer *Buffer)
 {
-    renderer *Renderer = &State.Renderer;
+    glBindBuffer(GL_ARRAY_BUFFER, Buffer->VertexBuffer);
+    glBindVertexArray(Buffer->VertexArray);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, Buffer->VertexCount*sizeof(Buffer->Vertices[0]), Buffer->Vertices);
 
-    glBindBuffer(GL_ARRAY_BUFFER, Renderer->VertexBuffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, State.VertexCount*sizeof(State.Vertices[0]), State.Vertices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Buffer->IndexBuffer);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, Buffer->IndexCount*sizeof(Buffer->Indices[0]), Buffer->Indices);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, State.IndexCount*sizeof(State.Indices[0]), State.Indices);
+    glUseProgram(Buffer->Program);
+    glDrawElements(GL_TRIANGLES, Buffer->IndexCount, GL_UNSIGNED_SHORT, 0);
 
-    glDrawElements(GL_TRIANGLES, State.IndexCount, GL_UNSIGNED_SHORT, 0);
-
-    State.IndexCount = 0;
-    State.VertexCount = 0;
+    Buffer->IndexCount = 0;
+    Buffer->VertexCount = 0;
 }
 
 
@@ -120,21 +122,21 @@ struct target_vertices_indices
 };
 
 function target_vertices_indices
-AllocateVerticesAndIndices(u32 RequestedVertexCount, u32 RequestedIndexCount)
+AllocateVerticesAndIndices(draw_buffer *Buffer, u32 RequestedVertexCount, u32 RequestedIndexCount)
 {
-    if(State.VertexCount + RequestedVertexCount >= ArrayCount(State.Vertices) ||
-       State.IndexCount + RequestedIndexCount >= ArrayCount(State.Indices)) 
+    if(Buffer->VertexCount + RequestedVertexCount >= ArrayCount(Buffer->Vertices) ||
+       Buffer->IndexCount + RequestedIndexCount >= ArrayCount(Buffer->Indices)) 
     {
-        FlushDrawBuffers();
+        Flush(Buffer);
     }
 
     target_vertices_indices Target;
-    Target.V = State.Vertices + State.VertexCount;
-    Target.I = State.Indices + State.IndexCount;
-    Target.FirstIndex = (u16)State.VertexCount;
+    Target.V = Buffer->Vertices + Buffer->VertexCount;
+    Target.I = Buffer->Indices + Buffer->IndexCount;
+    Target.FirstIndex = (u16)Buffer->VertexCount;
 
-    State.VertexCount += RequestedVertexCount;
-    State.IndexCount += RequestedIndexCount;
+    Buffer->VertexCount += RequestedVertexCount;
+    Buffer->IndexCount += RequestedIndexCount;
 
     return Target;
 }
@@ -162,7 +164,7 @@ function void PushQuadIndices(target_vertices_indices *Target,
 }
 
 
-function void PushBox(v3 Pos, v3 Dim)
+function void PushBox(m3x4 const &Transform)
 {
 
 //		   .4------5     4------5     4------5     4------5     4------5.
@@ -174,23 +176,17 @@ function void PushBox(v3 Pos, v3 Dim)
 //		2------3'      2------3       2------3       2------3      `2------3
 //
 
-    target_vertices_indices Target = AllocateVerticesAndIndices(8, 6*6);
+    target_vertices_indices Target = AllocateVerticesAndIndices(&State.Default, 8, 6*6);
 
-    // TODO(robin): Triangle strip?
+    Target.V[0].P = Transform * v3{-1, -1,  1};
+    Target.V[1].P = Transform * v3{ 1, -1,  1};
+    Target.V[2].P = Transform * v3{-1, -1, -1};
+    Target.V[3].P = Transform * v3{ 1, -1, -1};
 
-    v3 HalfDim = Dim*0.5f;
-    v3 n = Pos - HalfDim;
-    v3 p = Pos + HalfDim;
-
-    Target.V[0].P = {n.x, n.y, p.z};
-    Target.V[1].P = {p.x, n.y, p.z};
-    Target.V[2].P = {n.x, n.y, n.z};
-    Target.V[3].P = {p.x, n.y, n.z};
-
-    Target.V[4].P = {n.x, p.y, p.z};
-    Target.V[5].P = {p.x, p.y, p.z};
-    Target.V[6].P = {n.x, p.y, n.z};
-    Target.V[7].P = {p.x, p.y, n.z};
+    Target.V[4].P = Transform * v3{-1,  1,  1};
+    Target.V[5].P = Transform * v3{ 1,  1,  1};
+    Target.V[6].P = Transform * v3{-1,  1, -1};
+    Target.V[7].P = Transform * v3{ 1,  1, -1};
 
     Target.V[0].C = Red;
     Target.V[1].C = Green;
@@ -201,6 +197,7 @@ function void PushBox(v3 Pos, v3 Dim)
     Target.V[6].C = Blue;
     Target.V[7].C = White;
 
+    // TODO(robin): Triangle strip?
     PushQuadIndices(&Target, 0, 1, 2, 3); // Front
     PushQuadIndices(&Target, 1, 5, 3, 7); // Right
     PushQuadIndices(&Target, 4, 0, 6, 2); // Left
@@ -210,14 +207,13 @@ function void PushBox(v3 Pos, v3 Dim)
 }
 
 function void
-PushText(renderer *Renderer, string Text, m3x4 const &Transform = IdentityMatrix3x4)
+PushText(string Text, m3x4 const &Transform = IdentityMatrix3x4)
 {
-    f32 TextAdvance = 0.0f;
-    f32 UVScale = (1.0f / 256.0f);
+    v2 TextAdvance = {};
 
-    font_atlas_char *Geometry = Renderer->FontAtlas.Geometry;
+    font_atlas_char *Geometry = State.FontAtlas.Geometry;
 
-    target_vertices_indices Target = AllocateVerticesAndIndices(Text.Size*4, Text.Size*6);
+    target_vertices_indices Target = AllocateVerticesAndIndices(&State.Text, Text.Size*4, Text.Size*6);
 
     //v3 XAxis = GetXAxis(Transform);
     //v3 YAxis = GetYAxis(Transform);
@@ -228,12 +224,21 @@ PushText(renderer *Renderer, string Text, m3x4 const &Transform = IdentityMatrix
 
     for(size i = 0; i < Text.Size; ++i)
     {
-        font_atlas_char Char = Geometry[(u8)Text.Contents[i]];
+        char Char = Text.Contents[i];
+        if(Char == '\n')
+        {
+            TextAdvance.x = 0;
+            TextAdvance.y -= FONT_GLYPH_SIZE / 256.0f;
+            State.Text.IndexCount -= 6;
+            State.Text.VertexCount -= 4;
+            continue;
+        }
 
-        v2 Min = Char.Offset;
-        Min.x += TextAdvance;
-        TextAdvance += Char.Advance;
-        v2 Dim = Char.Max - Char.Min;
+        font_atlas_char Geom = Geometry[(u8)Text.Contents[i]];
+
+        v2 Min = Geom.Offset + TextAdvance;
+        TextAdvance.x += Geom.Advance;
+        v2 Dim = Geom.Max - Geom.Min;
         v2 Max = Min + Dim;
 
         Target.V[0].P = Transform * v3{Min.x, 0, Max.y};
@@ -241,18 +246,17 @@ PushText(renderer *Renderer, string Text, m3x4 const &Transform = IdentityMatrix
         Target.V[2].P = Transform * v3{Min.x, 0, Min.y};
         Target.V[3].P = Transform * v3{Max.x, 0, Min.y};
 
-        v2 UVMin = Char.Min * UVScale;
-        v2 UVMax = Char.Max * UVScale;
-
+        v2 UVMin = Geom.Min;// * UVScale;
+        v2 UVMax = Geom.Max;// * UVScale;
         Target.V[0].UV = UVMin;
         Target.V[1].UV = {UVMax.x, UVMin.y};
         Target.V[2].UV = {UVMin.x, UVMax.y};
         Target.V[3].UV = UVMax;
 
-        Target.V[0].C = Red;
-        Target.V[1].C = Green;
-        Target.V[2].C = Blue;
-        Target.V[3].C = Black;
+        Target.V[0].C = White;
+        Target.V[1].C = White;
+        Target.V[2].C = White;
+        Target.V[3].C = White;
 
         PushQuadIndices(&Target, 0, 1, 2, 3);
 
@@ -262,10 +266,30 @@ PushText(renderer *Renderer, string Text, m3x4 const &Transform = IdentityMatrix
     }
 }
 
+function void InitDrawBuffer(draw_buffer *Buffer)
+{
+    Buffer->VertexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ARRAY_BUFFER, Buffer->VertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Buffer->Vertices), 0, GL_STREAM_DRAW);
+
+    Buffer->VertexArray = glCreateVertexArray();
+    glBindVertexArray(Buffer->VertexArray);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
+
+
+    Buffer->IndexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Buffer->IndexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Buffer->Indices), 0, GL_STREAM_DRAW);
+}
+
 export_to_js void Init()
 {
-    renderer *Renderer = &State.Renderer;
-
     string ShaderHeader = S(R"HereDoc(#version 300 es
 precision highp float;
 vec3 LinearToSRGB_Approx(vec3 x)
@@ -309,8 +333,8 @@ void main()
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
 })HereDoc"));
 
-    Renderer->Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
-    Renderer->Transform = glGetUniformLocation(Renderer->Program, S("Transform"));
+    State.Default.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
+    State.Default.Transform = glGetUniformLocation(State.Default.Program, S("Transform"));
 
 
     Vert = Concat(&FrameMemory, ShaderHeader, S(R"HereDoc(
@@ -341,7 +365,7 @@ out vec4 FragColor;
 
 const float EdgeSmoothAmount = 2.0f; // In pixels
 const vec3 OutlineColor = vec3(0.0f);
-const float BorderThickness = 0.166f;
+const float BorderThickness = 0.25;
 
 const float OutlineBegin = 0.5f;
 const float OutlineEnd  = OutlineBegin - BorderThickness;
@@ -364,50 +388,36 @@ void main()
     vec3 Color = mix(OutlineColor, VertColor.rgb, SmoothEdge(OutlineBegin, Norm, Distance));
 
     FragColor = vec4(Color, VertColor.a*SmoothEdge(OutlineEnd, Norm, Distance));
+    if(FragColor.a < 0.001f) discard;
+
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
     FragColor.rgb *= FragColor.a;
 })HereDoc"));
 
-    Renderer->FontAtlas.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
-    Renderer->FontAtlas.Transform = glGetUniformLocation(Renderer->FontAtlas.Program, S("Transform"));
-    Renderer->FontAtlas.TextureSampler = glGetUniformLocation(Renderer->FontAtlas.Program, S("TextureSampler"));
+    State.Text.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
+    State.Text.Transform = glGetUniformLocation(State.Text.Program, S("Transform"));
+    State.FontAtlas.TextureSampler = glGetUniformLocation(State.Text.Program, S("TextureSampler"));
 
+    LoadFontAtlas(&FrameMemory, &State.FontAtlas);
 
-    Renderer->VertexBuffer = glCreateBuffer();
-    glBindBuffer(GL_ARRAY_BUFFER, Renderer->VertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(State.Vertices), 0, GL_STREAM_DRAW);
+    glUseProgram(State.Text.Program);
+    glBindTexture(GL_TEXTURE_2D, State.FontAtlas.Texture);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i((GLint)State.FontAtlas.TextureSampler, 0);
 
-    Renderer->IndexBuffer = glCreateBuffer();
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(State.Indices), 0, GL_STREAM_DRAW);
+    InitDrawBuffer(&State.Text);
+    InitDrawBuffer(&State.Default);
 
-    Renderer->VertexArray = glCreateVertexArray();
-    glBindVertexArray(Renderer->VertexArray);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
-
-    glEnable(GL_CULL_FACE);
+    //glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     //glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    LoadFontAtlas(&FrameMemory, &Renderer->FontAtlas);
 }
-
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
-    State.VertexCount = 0;
-    State.IndexCount = 0;
-
     v2 MousePixels = UserInput.MousePosPixels;
     v2 RenderDim = v2{(f32)Width, (f32)Height};
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
@@ -415,6 +425,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
 
     local_persist f32 Anim[4] = {0, 0.15f, 0.415f, 0.865f};
+    f32 Speeds[4] = {0.001f, 0.1f, 0.1f, 0.1f};
     f32 Curve[ArrayCount(Anim)];
     for(size i = 0; i < ArrayCount(Anim); ++i)
     {
@@ -423,15 +434,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             Anim[i] = 0.0f;
         }
         Curve[i] = SmoothCurve010(Anim[i]);
-        Anim[i] += DeltaTime*0.1f;
+        Anim[i] += DeltaTime*Speeds[i];
     }
 
-    v3 CameraP =
-    {
-        -3 + 6*Curve[0],
-        -15,
-        2 + 2*Curve[2],
-    };
+    v3 CameraP = {0, -107, 6};
 
     v3 Up = {0, 0, 1};
 
@@ -449,70 +455,14 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     m4x4_inv RenderTransform;
     RenderTransform.Forward = Projection.Forward * Camera.Forward;
     RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
+    glUseProgram(State.Text.Program);
+    glUniformMatrix4fv(State.Text.Transform, true, &RenderTransform.Forward);
+    glUseProgram(State.Default.Program);
+    glUniformMatrix4fv(State.Default.Transform, true, &RenderTransform.Forward);
 
-
-#if 1
-    renderer *Renderer = &State.Renderer;
-    glBindVertexArray(Renderer->VertexArray);
-    glUseProgram(Renderer->Program);
-    glUniformMatrix4fv(Renderer->Transform, true, &RenderTransform.Forward);
-#endif
-
-    random_state Random = DefaultSeed();
-
-    s32 MinX = -50;
-    s32 MaxX =  50;
-    s32 MinY = -14;
-    s32 MaxY =  200;
-
-#if 1
-    for(s32 y = MinY; y < MaxY; ++y)
-    {
-        for(s32 x = MinX; x < MaxX; ++x)
-        {
-            //
-            // NOTE(robin): Should normally use instanced rendering, but this is just a test
-            //
-
-            v3 P;
-            P.x = (f32)x;
-            P.y = (f32)y;
-            P.z = 1.5f*Curve[0]*RandomBilateral(&Random);
-            P.z += Curve[0]*RandomBilateral(&Random) * 0.3f * (14.0f + P.y);
-
-            v3 NormalDim = v3{0.8f, 0.8f, 0.8f};
-
-            v3 WeirdDim = v3{0.2f, 0.2f, 0.2f};
-            WeirdDim.x += 0.7f*RandomUnilateral(&Random);
-            WeirdDim.y += 0.7f*RandomUnilateral(&Random);
-            WeirdDim.z += 0.7f*RandomUnilateral(&Random);
-
-            v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
-
-            PushBox(P, Dim);
-        }
-    }
-#endif
-
-
-
-    local_persist f32 Distance = 10.0f;
-    {
-        button *K = UserInput.Keys;
-        if(K['W'].EndedDown)
-        {
-            Distance += Distance*DeltaTime;
-        }
-        if(K['S'].EndedDown)
-        {
-            Distance -= Distance*DeltaTime;
-        }
-    }
-
-
+    f32 Distance = 10.0f;
     v3 MouseWorldP = {};
     {
-
         v4 FromCamera = {0,0,0,1};
         FromCamera.xyz = CameraP - Distance*CameraZ;
         v4 FromCameraClip = RenderTransform.Forward * FromCamera;
@@ -524,36 +474,55 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         MouseWorldP = (RenderTransform.Inverse * ClipPos).xyz;
     }
 
+    random_state Random = DefaultSeed();
 
-#if 0
-    if(UserInput.MouseLeft.EndedDown)
-        CameraZ = Normalize(CameraZ + (MouseWorldP - State.LastMouseWorldP));
-    State.LastMouseWorldP = MouseWorldP;
-#endif
+    u32 Count = 4000;
+    for(u32 i = 0; i < Count; ++i)
+    {
+        f32 V = i / (f32)Count;
 
-    //PushBox(MouseWorldP, v3{2,2,2});
-    FlushDrawBuffers();
+        v3 P;
+        P.x = 7.0f*RandomBilateral(&Random) + 100.0f*CosineApproxN(V+Anim[0]);
+        P.y = 7.0f*RandomBilateral(&Random) + 100.0f*SineApproxN(V+Anim[0]);
 
-#if 1
-    glUseProgram(Renderer->FontAtlas.Program);
-    glUniformMatrix4fv(Renderer->FontAtlas.Transform, true, &RenderTransform.Forward);
-    glBindTexture(GL_TEXTURE_2D, Renderer->FontAtlas.Texture);
-    glActiveTexture(GL_TEXTURE0);
-    glUniform1i(Renderer->FontAtlas.TextureSampler, 0);
-#endif
+        P.z = CosineApproxN(V + RandomBilateral(&Random)) * 4.0f;
+
+        v3 NormalDim = v3{0.9f, 0.9f, 0.9f};
+
+        v3 WeirdDim = v3{0.6f, 0.3f, 0.3f};
+        WeirdDim.x += 0.2f*RandomUnilateral(&Random);
+        WeirdDim.y += 0.9f*RandomUnilateral(&Random);
+        WeirdDim.z += 0.9f*RandomUnilateral(&Random);
+
+        v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
+        v3 HalfDim = Dim*0.5f;
+
+        m3x4 Rot = XRotationN(RandomUnilateral(&Random) + V + Anim[0]) * 
+                   YRotationN(RandomUnilateral(&Random) + V + Anim[1]) *
+                   ZRotationN(RandomUnilateral(&Random) + V + Anim[2]);
+
+        m3x4 BoxTransform = Translation(P) * Rot * Scaling(HalfDim);
+        PushBox(BoxTransform);
+
+        if(LengthSquared(CameraP - P) < Square(20.0f))
+        {
+            m3x4 TextTransform = Translation(P) * Rot * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f);
+            char Buf[128];
+            string Text = FormatText(Buf, "Positie\n"
+                                          "x %d\n"
+                                          "y %d\n"
+                                          "z %d\n",
+                                          (s32)(100.0f*P.x),
+                                          (s32)(100.0f*P.y),
+                                          (s32)(100.0f*P.z));
+            PushText(Text, TextTransform);
+        }
+    }
 
 
-    local_persist u32 Things = 0;
-    char Buf[32];
-    string Text = FormatText(Buf, "blabla %u", Things++);
-    f32 s = 1.0f/32;
-    f32 Angle = Anim[0]*Pi32*4.0f;
 
-    m3x4 Transform = Translation(MouseWorldP) * YRotation(Angle) * Scaling(s);//MatrixAsRows3x4({s,0,0}, {0,0,s}, {0,s,0});
-
-    PushText(Renderer, Text, Transform);
-
-    FlushDrawBuffers();
+    Flush(&State.Default);
+    Flush(&State.Text);
 
     Reset(&FrameMemory);
 }

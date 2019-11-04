@@ -444,30 +444,36 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     return Result;
 }
 
-function f32 SineApprox(f32 x)
+function f32 SineApproxN(f32 x)
 {
-    constexpr f32 Normalize = 0.5f / Pi32;
-    x *= Normalize;
     x -= 0.5f + Floor(x);
     x *= 16.0f * (AbsoluteValue(x) - 0.5f);
     x += 0.225f * x * (AbsoluteValue(x) - 1.0f);
     return x;
 }
 
-function f32 CosineApprox(f32 x)
+function f32 CosineApproxN(f32 x)
 {
-    constexpr f32 Normalize = 0.5f / Pi32;
-    x *= Normalize;
     x -= 0.25f + Floor(x + 0.25f);
     x *= 16.0f * (AbsoluteValue(x) - 0.5f);
     x += 0.225f * x * (AbsoluteValue(x) - 1.0f);
     return x;
 }
 
-function m3x4 XRotation(f32 v)
+function f32 SineApprox(f32 x)
 {
-    f32 s = SineApprox(v);
-    f32 c = CosineApprox(v);
+    return SineApproxN(x * (0.5f/Pi32));
+}
+
+function f32 CosineApprox(f32 x)
+{
+    return CosineApproxN(x * (0.5f/Pi32));
+}
+
+function m3x4 XRotationN(f32 v)
+{
+    f32 s = SineApproxN(v);
+    f32 c = CosineApproxN(v);
     m3x4 Result =
     {
          {{ 1, 0, 0, 0 },
@@ -476,10 +482,10 @@ function m3x4 XRotation(f32 v)
     };
     return Result;
 }
-function m3x4 YRotation(f32 v)
+function m3x4 YRotationN(f32 v)
 {
-    f32 s = SineApprox(v);
-    f32 c = CosineApprox(v);
+    f32 s = SineApproxN(v);
+    f32 c = CosineApproxN(v);
     m3x4 Result =
     {
          {{ c, 0, s, 0 },
@@ -488,10 +494,10 @@ function m3x4 YRotation(f32 v)
     };
     return Result;
 }
-function m3x4 ZRotation(f32 v)
+function m3x4 ZRotationN(f32 v)
 {
-    f32 s = SineApprox(v);
-    f32 c = CosineApprox(v);
+    f32 s = SineApproxN(v);
+    f32 c = CosineApproxN(v);
     m3x4 Result =
     {
          {{ c,-s, 0, 0 },
