@@ -185,7 +185,7 @@ void main()
     vec3 Color = mix(OutlineColor, VertColor.rgb, SmoothEdge(OutlineBegin, Norm, Distance));
 
     FragColor = vec4(Color, VertColor.a*SmoothEdge(OutlineEnd, Norm, Distance));
-    if(FragColor.a < 0.001f) discard;
+    if(FragColor.a < 0.00001f) discard;
 
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
     FragColor.rgb *= FragColor.a;
@@ -422,10 +422,10 @@ PushText(string Text, m3x4 const &Transform = IdentityMatrix3x4)
         v2 Dim = Geom.Max - Geom.Min;
         v2 Max = Min + Dim;
 
-        Target.V[0].P = Transform * v3{Min.x, 0, Max.y};
-        Target.V[1].P = Transform * v3{Max.x, 0, Max.y};
-        Target.V[2].P = Transform * v3{Min.x, 0, Min.y};
-        Target.V[3].P = Transform * v3{Max.x, 0, Min.y};
+        Target.V[0].P = Transform * v3{Min.x, Max.y, 0};
+        Target.V[1].P = Transform * v3{Max.x, Max.y, 0};
+        Target.V[2].P = Transform * v3{Min.x, Min.y, 0};
+        Target.V[3].P = Transform * v3{Max.x, Min.y, 0};
 
         v2 UVMin = Geom.Min;// * UVScale;
         v2 UVMax = Geom.Max;// * UVScale;
@@ -552,14 +552,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
         P.z = CosineApproxN(V + RandomBilateral(&Random)) * 4.0f;
 
-        v3 NormalDim = v3{0.9f, 0.9f, 0.9f};
-
-        v3 WeirdDim = v3{0.6f, 0.3f, 0.3f};
-        WeirdDim.x += 0.2f*RandomUnilateral(&Random);
-        WeirdDim.y += 0.9f*RandomUnilateral(&Random);
-        WeirdDim.z += 0.9f*RandomUnilateral(&Random);
-
-        v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
+        v3 Dim = v3{0.9f, 0.9f, 0.9f};
         v3 HalfDim = Dim*0.5f;
 
         v3 Angles = {RandomUnilateral(&Random) - Anim[2],
@@ -615,13 +608,16 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
         if(LengthSquared(CameraP - P) < Square(20.0f))
         {
-            m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f);
+            m3x4 FrontFacing = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
+            m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f) * FrontFacing;
             char Buf[128];
-            string Text = FormatText(Buf, "Positie\n"
+            string Text = FormatText(Buf, 
+                                          "Box #%u\n"
+                                          "Position:\n"
                                           "x %f\n"
                                           "y %f\n"
                                           "z %f\n",
-                                          P.x, P.y, P.z);
+                                          i, P.x, P.y, P.z);
 
             PushText(Text, TextTransform);
         }
@@ -652,7 +648,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     m3x4 PlanetTransform = Translation(5.0f, 0, 0) * Scaling(10.0f, 9, 9) * ZRotationN(Anim[4]);// * Scaling(10.0f);
 
-    m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
+    //m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
     PushBox(PlanetTransform, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);
 
     //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
@@ -661,11 +657,19 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     Flush(&State.Default.Common);
     Flush(&State.Text.Common);
 
+
+    m4x4 HUDProj = HUDProjection(Width, Height);
     glUseProgram(State.Text.Common.Program);
-    glUniformMatrix4fv(State.Text.Common.Transform, true, &IdentityMatrix4x4);
+    glUniformMatrix4fv(State.Text.Common.Transform, true, &HUDProj);
+
 
     glClear(GL_DEPTH_BUFFER_BIT);
-    PushText(S("what"), Scaling(0.1f));
+
+    char Buf[32];
+    string HudText = FormatText(Buf, "%f ms", DeltaTime*1000.0f);
+    PushText(HudText, Scaling(0.3f));
+
+
     Flush(&State.Text.Common);
 
     Reset(&FrameMemory);

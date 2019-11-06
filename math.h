@@ -460,14 +460,31 @@ PerspectiveProjectionTransform(u32 Width, u32 Height, f32 NearClip, f32 FarClip,
     };
     Result.Inverse =
     {
-        {{1/x,     0,    0,    0},
-         {  0,   1/y,    0,    0},
-         {  0,     0,    0,   -1},
-         {  0,     0,  1/b,  a/b}}
+        {{1/x,    0,    0,    0},
+         {  0,  1/y,    0,    0},
+         {  0,    0,    0,   -1},
+         {  0,    0,  1/b,  a/b}}
     };
     
     return Result;
 }
+
+function m4x4 HUDProjection(u32 Width, u32 Height)
+{
+    f32 x = (f32)Height/(f32)Width;
+    f32 y = 1;
+    
+    m4x4 Result =
+    {
+       {{x,  0,  0, -1},
+        {0,  y,  0,  1},
+        {0,  0,  1,  0},
+        {0,  0,  0,  1}}
+    };
+
+    return Result;
+}
+
 
 function m4x4_inv
 CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
