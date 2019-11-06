@@ -96,7 +96,7 @@ import_from_js void glBindVertexArray(GLuint array);
 import_from_js void glEnableVertexAttribArray (GLuint index);
 import_from_js void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 import_from_js GLuint glGetUniformLocation (GLuint Program, u32 NameLength, char *NamePtr);
-import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 *Data);
+import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 const *Data);
 import_from_js void glUniform1i (GLint location, GLint v0);
 
 import_from_js void glDrawArrays(GLenum mode, GLint first, GLsizei count);

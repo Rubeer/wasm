@@ -1,4 +1,5 @@
 
+
 struct button
 {
     u32 HalfTransitionCount;
@@ -43,14 +44,7 @@ struct font_atlas_char
     float Advance;
 };
 
-struct font_atlas
-{
-    GLuint Texture;
-    GLuint TextureSampler;
-    font_atlas_char Geometry[256];
-};
-
-struct draw_buffer
+struct renderer_common
 {
     GLuint Program;
     GLuint Transform;
@@ -58,18 +52,34 @@ struct draw_buffer
     GLuint VertexBuffer;
     GLuint VertexArray;
     GLuint IndexBuffer;
+
     u32 VertexCount;
     u32 IndexCount;
+
     vertex Vertices[(1 << 16) - 1];
     u16 Indices[ArrayCount(Vertices)*6*6];
 };
 
+
+struct renderer_text
+{
+    renderer_common Common;
+
+    GLuint Texture;
+    GLuint TextureSampler;
+    font_atlas_char Geometry[256];
+
+};
+
+struct renderer_default
+{
+    renderer_common Common;
+};
+
 struct state
 {
-
-    font_atlas FontAtlas;
-
-    draw_buffer Default;
-    draw_buffer Text;
+    user_input Input;
+    renderer_default Default;
+    renderer_text Text;
 };
 

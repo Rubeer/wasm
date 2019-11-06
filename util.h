@@ -21,6 +21,7 @@ constexpr u8 U8Max = 0xFF;
 constexpr u16 U16Max = 0xFFFF;
 constexpr u32 U32Max = 0xFFFFFFFF;
 constexpr u64 U64Max = 0xFFFFFFFFFFFFFFFF;
+constexpr f32 F32Max = 3.40282347e+38F;
 
 
 #define OffsetOf(Struct, Member) ((uintptr_t)&((Struct *)0)->Member)
@@ -63,11 +64,11 @@ function void JS_Abort(string Reason, string File, string Func, u32 LineNumber)
     JS_Abort(Reason.Size, Reason.Contents, File.Size, File.Contents, Func.Size, Func.Contents, LineNumber);
 }
 
-#define Assert(Condition) if(Unlikely(!(Condition))) Abort(S("Assertion failed: " #Condition))
-#define Abort(Reason) JS_Abort(Reason, S(__FILE__), S(__FUNCTION__), __LINE__)
+#define Assert(Condition) if(Unlikely(!(Condition))) Abort("Assertion failed: " #Condition)
+#define Abort(Reason) JS_Abort(S(Reason), S(__FILE__), S(__FUNCTION__), __LINE__)
 
-#define InvalidDefaultCase default: Abort(S("Invalid default case hit!"))
-#define NotImplemented Abort(S("Not implemented!"))
+#define InvalidDefaultCase default: Abort("Invalid default case hit!")
+#define NotImplemented Abort("Not implemented!")
 
 
 function void JS_Log(string String)
@@ -76,21 +77,18 @@ function void JS_Log(string String)
 }
 
 
-template<typename number>
+template<typename number> constexpr
 function number Minimum(number A, number B)
 {
     return A < B ? A : B;
 }
-template<typename number>
+template<typename number> constexpr
 function number Maximum(number A, number B)
 {
     return A > B ? A : B;
 }
 
-function f32 Clamp01(f32 V)
-{
-    return Maximum(0.0f, Minimum(1.0f, V));
-}
+
 
 function void MemoryCopy(void *Dest, void *Source, size Size)
 {
@@ -497,43 +495,36 @@ function string Concat(memory_arena *Memory, string A, char Separator, string B)
 // https://en.wikipedia.org/wiki/Xorshift
 //
 
-function u64 rol64(u64 x, int k)
-{
-	return (x << k) | (x >> (64 - k));
-}
-
 struct random_state
 {
-	u64 s[4];
+    u32 x;
 };
+
+function u32 xorshift32(random_state *State)
+{
+	uint32_t x = State->x;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return State->x = x;
+}
 
 function random_state DefaultSeed()
 {
-    random_state Result = {0x12345678ABCDEF65, 0x12345678ABCDEF65,
-                          0xABCDEF0987654321, 0x1234567812345678};
+    random_state Result = {0x12345678};
     return Result;
 }
 
-function u32 xoshiro256p(random_state *State)
+function s32 RandomBetween(random_state *State, s32 Min, s32 Max)
 {
-	u64 *s = State->s;
-	u64 Result = s[0] + s[3];
-	u64 t = s[1] << 17;
-
-	s[2] ^= s[0];
-	s[3] ^= s[1];
-	s[1] ^= s[2];
-	s[0] ^= s[3];
-
-	s[2] ^= t;
-	s[3] = rol64(s[3], 45);
-
-	return Result >> 32;
+    s32 Range = Max - Min;
+    s32 Result = Min + ((s32)xorshift32(State) % Range);
+    return Result;
 }
 
 function f32 RandomUnilateral(random_state *State)
 {
-    u32 Random = xoshiro256p(State);
+    u32 Random = xorshift32(State);
     f32 Result = Random * (1.0f / (f32)U32Max);
     return Result;
 }
@@ -542,3 +533,15 @@ function f32 RandomBilateral(random_state *State)
 {
     return -1.0f + 2.0f*RandomUnilateral(State);
 }
+
+function u32 RandomSolidColor(random_state *Random)
+{
+    u32 Result = ((u32)xorshift32(Random) % 255) << 0 | 
+                 ((u32)xorshift32(Random) % 255) << 8 | 
+                 ((u32)xorshift32(Random) % 255) << 16 |
+                 (u32)0xFF << 24;
+    return Result;
+}
+
+
+

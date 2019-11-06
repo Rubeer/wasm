@@ -127,7 +127,7 @@ function void InitTextRendering(memory_arena *Memory, renderer_text *TextRendere
 
     TextRenderer->Texture = glCreateTexture();
     glBindTexture(GL_TEXTURE_2D, TextRenderer->Texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AtlasWidth, AtlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AtlasWidth, AtlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize/4, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -308,39 +308,14 @@ function void PushQuadIndices(target_vertices_indices *Target,
     Target->I += 6;
 }
 
-struct hit_test
+struct box_hit_test
 {
     v3 RayOrigin;
-    v3 RayOriginOffset;
-    f32 LastHitDistance;
+    v3 RayDirectionPos;
+    bool Hit;
 };
 
-function bool RaycastBox(hit_test *HitTest, m3x4 const &InverseBoxTransform)
-{
-    v3 RayOrigin = InverseBoxTransform * HitTest->RayOrigin;
-    v3 RayOriginOffset = InverseBoxTransform * HitTest->RayOriginOffset;
-    v3 RayDir = Normalize(RayOriginOffset - RayOrigin);
-
-    v3 BoxMin = v3{-1, -1, -1};
-    v3 BoxMax = v3{ 1,  1,  1};
-
-    v3 tBoxMin = (BoxMin - RayOrigin) / RayDir;
-    v3 tBoxMax = (BoxMax - RayOrigin) / RayDir;
-
-    v3 tMin3 = Minimum(tBoxMin, tBoxMax);
-    v3 tMax3 = Maximum(tBoxMin, tBoxMax);
-
-    f32 tMin = Maximum(tMin3.x, Maximum(tMin3.y, tMin3.z));
-    f32 tMax = Minimum(tMax3.x, Minimum(tMax3.y, tMax3.z));
-
-    bool Hit = (tMin > 0.0f) && (tMin < tMax);
-    HitTest->LastHitDistance = tMin;
-
-    return Hit;
-}
-
-
-function void PushBox(m3x4 const &Transform,
+function void PushBox(m3x4 const &Transform, box_hit_test *HitTest = 0,
               u32 C04 = Red,
               u32 C15 = Green,
               u32 C26 = Blue,
@@ -368,14 +343,49 @@ function void PushBox(m3x4 const &Transform,
     Target.V[6].P = Transform * v3{-1,  1, -1};
     Target.V[7].P = Transform * v3{ 1,  1, -1};
 
-    Target.V[0].C = C04;
-    Target.V[1].C = C15;
-    Target.V[2].C = C26;
-    Target.V[3].C = C37;
-    Target.V[4].C = C04;
-    Target.V[5].C = C15;
-    Target.V[6].C = C26;
-    Target.V[7].C = C37;
+    u32 HighlightMask = 0;
+    if(HitTest)
+    {
+        v3 RayOrigin = Transform * HitTest->RayOrigin;
+        v3 RayDirPos = Transform * HitTest->RayDirectionPos;
+        v3 RayDir = Normalize(RayDirPos - RayOrigin);
+
+        PushBox(Translation(RayOrigin) * Scaling(5.0f));
+        PushBox(Translation(RayOrigin + 1100.0f*RayDir) * Scaling(1.0f));
+
+        //v3 RayDirPos = Transform * HitTest->RayDirectionPos;
+        //
+        //Printf("%d %d %d", (s32)(100.0f*RayDir.x), (s32)(100.0f*RayDir.y), (s32)(100.0f*RayDir.z));
+
+
+        v3 BoxMin = v3{-1, -1, -1};
+        v3 BoxMax = v3{ 1,  1,  1};
+
+        //v3 RayDir = Normalize(RayDirPos - RayOrigin);
+
+        v3 tBoxMin = (BoxMin - RayOrigin) / RayDir;
+        v3 tBoxMax = (BoxMax - RayOrigin) / RayDir;
+
+        v3 tMin3 = Minimum(tBoxMin, tBoxMax);
+        v3 tMax3 = Maximum(tBoxMin, tBoxMax);
+
+        f32 tMin = Maximum(tMin3.x, Maximum(tMin3.y, tMin3.z));
+        f32 tMax = Minimum(tMax3.x, Minimum(tMax3.y, tMax3.z));
+
+        if((tMin > 0.0f) && (tMin < tMax))
+        {
+            HighlightMask = 0xFFFFFF;
+        }
+    }
+
+    Target.V[0].C = C04 | HighlightMask;
+    Target.V[1].C = C15 | HighlightMask;
+    Target.V[2].C = C26 | HighlightMask;
+    Target.V[3].C = C37 | HighlightMask;
+    Target.V[4].C = C04 | HighlightMask;
+    Target.V[5].C = C15 | HighlightMask;
+    Target.V[6].C = C26 | HighlightMask;
+    Target.V[7].C = C37 | HighlightMask;
 
     // TODO(robin): Triangle strip?
     PushQuadIndices(&Target, 0, 1, 2, 3); // Front
@@ -512,7 +522,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glUseProgram(State.Default.Common.Program);
     glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
 
-    f32 Distance = 3.0f;
+    f32 Distance = 10.0f;
     v3 MouseWorldP = {};
     {
         v4 FromCamera = {0,0,0,1};
@@ -528,16 +538,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     random_state Random = DefaultSeed();
 
-    hit_test HitTest = {};
+    box_hit_test HitTest = {};
     HitTest.RayOrigin = CameraP;
-    HitTest.RayOriginOffset = MouseWorldP;
-    HitTest.LastHitDistance = F32Max;
-
-    local_persist f32 SelectedFlyAnim;
-    local_persist u32 Selected = U32Max;
-    local_persist u32 FlyOut = U32Max;
-    u32 ClosestIndex = U32Max;
-    f32 ClosestDistance = F32Max;
+    HitTest.RayDirectionPos = MouseWorldP;
 
     u32 Count = 4000;
     for(u32 i = 0; i < Count; ++i)
@@ -560,55 +563,16 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
         v3 HalfDim = Dim*0.5f;
 
-        v3 Angles = {RandomUnilateral(&Random) + V + Anim[2],
-                     RandomUnilateral(&Random) + V + Anim[1],
-                     RandomUnilateral(&Random) + V + Anim[2]};
+        m3x4 Rot = XRotationN(RandomUnilateral(&Random) + V + Anim[2]) * 
+                   YRotationN(RandomUnilateral(&Random) + V + Anim[1]) *
+                   ZRotationN(RandomUnilateral(&Random) + V + Anim[2]);
 
-
-        m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * ZYXRotationN(-Angles) * Translation(-P);
-
-        u32 C0 = Red;
-        u32 C1 = Green;
-        u32 C2 = Blue;
-        u32 C3 = White;
-
-        if(i == Selected)
-        {
-            C0 |= 0x00AAAAAA;
-            C1 |= 0x00AAAAAA;
-            C2 |= 0x00AAAAAA;
-            C3 |= 0x00AAAAAA;
-        }
-
-        if(i == Selected || i == FlyOut)
-        {
-            
-            P = Lerp(P, SmoothCurve01(SelectedFlyAnim), MouseWorldP);
-        }
-
-        if(RaycastBox(&HitTest, InverseBoxTransform))
-        {
-            if(HitTest.LastHitDistance < ClosestDistance)
-            {
-                ClosestDistance = HitTest.LastHitDistance;
-                ClosestIndex = i;
-            }
-
-            C0 |= 0x00555555;
-            C1 |= 0x00555555;
-            C2 |= 0x00555555;
-            C3 |= 0x00555555;
-        }
-
-        m3x4 UnscaledBoxTransform = Translation(P) * XYZRotationN(Angles);
-        m3x4 BoxTransform = UnscaledBoxTransform*Scaling(HalfDim);
-
-        PushBox(BoxTransform, C0, C1, C2, C3);
-
+        m3x4 BoxTransform = Translation(P) * Rot * Scaling(HalfDim);
+        PushBox(BoxTransform);//, &HitTest);
 
         if(LengthSquared(CameraP - P) < Square(20.0f))
         {
-            m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f);
+            m3x4 TextTransform = Translation(P) * Rot * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f);
             char Buf[128];
             string Text = FormatText(Buf, "Positie\n"
                                           "x %d\n"
@@ -621,45 +585,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
     }
 
-    button *Left = &State.Input.MouseLeft;
-    if(Left->HalfTransitionCount && Left->EndedDown)
-    {
-        Left->HalfTransitionCount = 0;
-        FlyOut = Selected;
-        Selected = ClosestIndex;
-    }
+    m3x4 PlanetTransform = Translation(5.0f, 0, 0) * Scaling(10.0f) * ZRotationN(0.6f);// * Scaling(10.0f);
 
-    if(Selected != U32Max)
-    {
-        if(SelectedFlyAnim < 1)
-        {
-            SelectedFlyAnim += DeltaTime;
-        }
-    }
-    else
-    {
-        if(SelectedFlyAnim > 0)
-        {
-            SelectedFlyAnim -= DeltaTime;
-        }
-    }
 
-    m3x4 PlanetTransform = Translation(5.0f, 0, 0) * Scaling(10.0f, 9, 9) * ZRotationN(0.6f);// * Scaling(10.0f);
-
-    m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
-    PushBox(PlanetTransform, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);
-
-    //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
+    PushBox(PlanetTransform, &HitTest, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);
 
 
     Flush(&State.Default.Common);
-    Flush(&State.Text.Common);
-
-    glUseProgram(State.Text.Common.Program);
-    glUniformMatrix4fv(State.Text.Common.Transform, true, &IdentityMatrix4x4);
-
-    glClear(GL_DEPTH_BUFFER_BIT);
-    PushText(S("what"), Scaling(0.1f));
     Flush(&State.Text.Common);
 
     Reset(&FrameMemory);

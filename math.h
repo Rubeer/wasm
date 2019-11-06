@@ -13,13 +13,23 @@ function f32 Ceil(f32 V) { return __builtin_ceilf(V); };
 // TODO(robin): Convince llvm to use the wasm "f32.nearest" instruction here.. (it actually tries linking with roundf if you use __builtin_roundf)
 function f32 Round(f32 V) { return Floor(V + 0.5f); };
 
+function f32 Clamp01(f32 V)
+{
+    return Maximum(0.0f, Minimum(1.0f, V));
+}
+
 function f32 SmoothCurve010(f32 x)
 {
     x = Clamp01(x);
     f32 y = 16.0f*Square(1.0f - x)*x*x; // NOTE(robin): http://thetamath.com/app/y=16(x-1)%5E(2)x%5E(2)
     return y;
 }
-
+function f32 SmoothCurve01(f32 x)
+{
+    x = Clamp01(x);
+    f32 y = (3.0f - 2.0f*x)*x*x; // NOTE(robin): http://thetamath.com/app/y=(3-2x)*x*x
+    return y;
+}
 union v2
 {
     struct
@@ -108,10 +118,31 @@ function v3 &operator/=(v3 &A, v3 B) { A = {A.x/B.x, A.y/B.y, A.z/B.z}; return A
 function v3 operator*(v3 A, f32 B) { return {A.x*B, A.y*B, A.z*B}; }
 function v3 operator*(f32 B, v3 A) { return {A.x*B, A.y*B, A.z*B}; }
 function v3 operator/(v3 A, f32 B) { f32 Div = (1.0f/B); return { A.x*Div, A.y*Div, A.z*Div }; }
+function v3 operator/(f32 B, v3 A) { return { B/A.x, B/A.y, B/A.z }; }
+function v3 operator-(v3 V) { return { -V.x, -V.y, -V.z }; }
 
 function f32 Dot(v3 A, v3 B)     { return A.x*B.x + A.y*B.y + A.z*B.z; }
 function f32 LengthSquared(v3 A) { return A.x*A.x + A.y*A.y + A.z*A.z; }
 function f32 Length(v3 A) { return SquareRoot(A.x*A.x + A.y*A.y + A.z*A.z); }
+
+constexpr function v3 Minimum(v3 A, v3 B)
+{
+    return
+    {
+        Minimum(A.x, B.x),
+        Minimum(A.y, B.y),
+        Minimum(A.z, B.z),
+    };
+}
+constexpr function v3 Maximum(v3 A, v3 B)
+{
+    return
+    {
+        Maximum(A.x, B.x),
+        Maximum(A.y, B.y),
+        Maximum(A.z, B.z),
+    };
+}
 
 function 
 v3 Lerp(v3 A, f32 t, v3 B)
@@ -272,6 +303,35 @@ function v3 operator*(m4x4 const &M, v3 V)
     return Result;
 }
 
+function m4x4 To4x4(m3x4 const &M)
+{
+    m4x4 Result;
+    for(int r = 0; r < 3; ++r)
+    {
+        for(int c = 0; c < 4; ++c)
+        {
+            Result.E[r][c]  = M.E[r][c];
+        }
+    }
+    Result.E[3][0] = 0;
+    Result.E[3][1] = 0;
+    Result.E[3][2] = 0;
+    Result.E[3][3] = 1;
+    return Result;
+}
+function m3x4 To3x4(m4x4 const &M)
+{
+    m3x4 Result;
+    for(int r = 0; r < 3; ++r)
+    {
+        for(int c = 0; c < 4; ++c)
+        {
+            Result.E[r][c]  = M.E[r][c];
+        }
+    }
+    return Result;
+}
+
 
 
 function m3x4 operator*(m3x4 const &A, m3x4 const &B)
@@ -393,7 +453,7 @@ PerspectiveProjectionTransform(u32 Width, u32 Height, f32 NearClip, f32 FarClip,
     f32 x = FocalLength;
     f32 y = FocalLength;
 
-    if(Width > Height)
+    if(1)//Width > Height)
         x *= (f32)Height / (f32)Width;
     else
         y *= (f32)Width  / (f32)Height;
@@ -505,4 +565,14 @@ function m3x4 ZRotationN(f32 v)
           { 0, 0, 1, 0 }}
     };
     return Result;
+}
+
+// TODO(robin): Symbolically solve these!
+function m3x4 XYZRotationN(v3 V)
+{
+    return XRotationN(V.x) * YRotationN(V.y) * ZRotationN(V.z);
+}
+function m3x4 ZYXRotationN(v3 V)
+{
+    return ZRotationN(V.x) * YRotationN(V.y) * XRotationN(V.z);
 }

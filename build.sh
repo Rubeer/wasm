@@ -4,14 +4,15 @@
 # This ensures that this script will work when ran from a different working directory.
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-mkdir -p $DIR/bin
+cp $DIR/index.html /usr/share/nginx/html/
+cp $DIR/main.js /usr/share/nginx/html/
 
+mkdir -p $DIR/bin
 pushd $DIR/bin > /dev/null
 
 # We turn on ALL warnings and selectively turn off the ones we don't like.
 warning_flags="-Weverything -Wno-missing-prototypes -Wno-old-style-cast -Wno-writable-strings -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-extra-semi-stmt -Wno-gnu-zero-variadic-macro-arguments -Wno-zero-as-null-pointer-constant -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-missing-braces -Wno-unused-template -Wno-unused-function -Wno-padded -Wno-cast-qual -Wno-unused-const-variable -Wno-cast-align -Wno-char-subscripts -Wno-unused-macros"
-# Turn off dumb "features" (maybe redundant when compiling bare wasm)
-make_cpp_dumb="-fno-exceptions -fno-rtti -fno-threadsafe-statics -fwrapv"
+make_cpp_dumb="-nostdinc++ -fno-exceptions -fno-rtti -fno-threadsafe-statics -fwrapv"
 
 # Translate C++ to LLVM bytecode
 echo clang
@@ -30,14 +31,13 @@ then
     
     # Link, add js function imports
     echo wasm-ld
-    wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-dynamic --import-memory --stack-first
+    wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-all --stack-first
 
     # Strip out static variable bloat (zeroes)
     echo wasm-opt
     wasm-opt -O2 main.wasm -o main.wasm
     
     cp main.wasm /usr/share/nginx/html/
-    cp $DIR/index.html /usr/share/nginx/html/
 fi
 
 popd > /dev/null
