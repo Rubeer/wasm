@@ -8,36 +8,46 @@
 <canvas id="canvas_webgl"> </canvas>
 
 <script>
-    const MemoryPageCount = 1024;
-    const MemorySize = MemoryPageCount * 65536;
-    let Imports = {};
-    Imports.memory = new WebAssembly.Memory({initial:MemoryPageCount});
-    const Memory = new Uint8Array(Imports.memory.buffer);
-    let gl = null;
-    let GLObjects = new Array();
-    const ASCIIDecoder = new TextDecoder("ascii");
-
-    let FontAtlasPixels = null;
-    let FontAtlasGeom = null;
 
     async function LoadImageAsRawPixels(FileName)
     {
-        let Img = new Image();
+        const Img = new Image();
         Img.src = FileName;
         await Img.decode();
 
-        let DummyCanvas = document.createElement("canvas");
-        let Context = DummyCanvas.getContext("2d");
+        const DummyCanvas = document.createElement("canvas");
+        const Context = DummyCanvas.getContext("2d");
 
         DummyCanvas.width = Img.width;
         DummyCanvas.height = Img.height;
         Context.drawImage(Img, 0, 0);
 
-        let Data = Context.getImageData(0, 0, Img.width, Img.height).data.buffer;
+        const Data = Context.getImageData(0, 0, Img.width, Img.height).data.buffer;
 
         DummyCanvas.remove();
         return Data;
     }
+
+    let FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png");
+    let FontAtlasGeom = fetch("font_atlas_signed_distance_field.geom").then(data => data.arrayBuffer());
+    let Program = fetch("main.wasm");
+
+    const gl = document.getElementById("canvas_webgl").getContext("webgl2");
+    if(!gl)
+    {
+        let Message = "WebGL 2 context could not be acquired";
+        document.body.innerHTML = Message;
+        throw Error(Message);
+    }
+
+
+    const MemoryPageCount = 1024;
+    const MemorySize = MemoryPageCount * 65536;
+    const Imports = {};
+    Imports.memory = new WebAssembly.Memory({initial:MemoryPageCount});
+    const Memory = new Uint8Array(Imports.memory.buffer);
+    const GLObjects = new Array();
+    const ASCIIDecoder = new TextDecoder("ascii");
 
 
     function GetWasmString(Length, Pointer)
@@ -74,6 +84,7 @@
     
     Imports.glClear = function(Mask) { gl.clear(Mask); }
     Imports.glClearColor = function(R, G, B, A) { gl.clearColor(R, G, B, A); }
+    Imports.glViewport = function(x, y, w, h) { gl.viewport(x,y,w,h,); }
     Imports.glBlendFunc = function(SourceFactor, DestFactor) { gl.blendFunc(SourceFactor, DestFactor); }
     Imports.glBlendEquation = function(Mode) { gl.blendEquation(Mode); }
     Imports.glCreateShader = function(Type) { return PushGLObj(gl.createShader(Type)); }
@@ -211,48 +222,39 @@
 
     async function Init()
     {
-        let Program = WebAssembly.instantiateStreaming(fetch("main.wasm"), {"env":Imports});
+        Program = WebAssembly.instantiateStreaming(Program, {"env":Imports});
 
-        FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png");
-        FontAtlasGeom = await fetch("font_atlas_signed_distance_field.geom");
-        FontAtlasGeom = await FontAtlasGeom.arrayBuffer();
+        FontAtlasGeom = await FontAtlasGeom;
         FontAtlasPixels = await FontAtlasPixels;
-
         Program = await Program;
+
         const Functions = Program.instance.exports;
-
-        console.log(FontAtlasPixels);
-        console.log(FontAtlasGeom);
-
-        let Canvas = document.getElementById("canvas_webgl");
 
         function Resize()
         {
             const Ratio = window.devicePixelRatio;
             const Width = window.innerWidth;
             const Height = window.innerHeight;
-            Canvas.width = Width;
-            Canvas.height = Height;
-            gl.viewport(0, 0, Width, Height);
+            gl.canvas.width = Width;
+            gl.canvas.height = Height;
             console.log("Resize");
-
         }
         window.addEventListener('resize', Resize);
 
-        Canvas.addEventListener("mousemove", Event =>
+        gl.canvas.addEventListener("mousemove", Event =>
         {
-            const Rect = Canvas.getBoundingClientRect();
+            const Rect = gl.canvas.getBoundingClientRect();
             const MouseX = Event.clientX - Rect.left;
             const MouseY = Event.clientY - Rect.top;
             Functions.MouseMove(MouseX, MouseY);
         });
 
-        Canvas.addEventListener("mousedown", Event =>
+        gl.canvas.addEventListener("mousedown", Event =>
         {
             Functions.MouseLeft(true);
         });
 
-        Canvas.addEventListener("mouseup", Event =>
+        gl.canvas.addEventListener("mouseup", Event =>
         {
             Functions.MouseLeft(false);
         });
@@ -267,28 +269,15 @@
             Functions.KeyPress(Event.keyCode, false);
         });
 
-        gl = Canvas.getContext("webgl2");
-        if(!gl)
-        {
-            let Message = "WebGL 2 context could not be acquired";
-            document.body.innerHTML = Message;
-            throw Error(Message);
-        }
-
 
         Functions.Init();
 
-        let Prev = null;
+        let PrevTime = null;
         function RenderLoop(Now)
         {
-            let DeltaTime = Prev ? Now - Prev : Now;
-            Prev = Now;
-
             window.requestAnimationFrame(RenderLoop);
-            gl.clearColor(0.3, 0.3, 0.3, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            let Rect = gl.canvas.getBoundingClientRect();
-
+            let DeltaTime = PrevTime ? Now - PrevTime : Now;
+            PrevTime = Now;
             Functions.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
         }
 

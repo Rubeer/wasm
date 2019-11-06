@@ -9,6 +9,8 @@ glDisable
 glClear
 glClearColor
 
+glViewport
+
 glBlendFunc
 glBlendEquation
 

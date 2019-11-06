@@ -74,6 +74,8 @@ import_from_js void glBlendEquation (GLenum mode);
 import_from_js void glClearColor(GLclampf red, GLclampf green, GLclampf blue, GLclampf alpha);
 import_from_js void glClear(GLbitfield mask);
 
+import_from_js void glViewport(GLint x, GLint y, GLsizei width, GLsizei height);
+
 import_from_js void glShaderSource(GLuint shader, GLsizei Length, void *Data);
 import_from_js GLuint glCreateShader(GLenum type);
 import_from_js void glCompileShader(GLuint shader);
@@ -106,6 +108,7 @@ import_from_js void glTexParameteri (GLenum target, GLenum pname, GLint param);
 import_from_js void glBindTexture (GLenum target, GLuint texture);
 import_from_js void glGenerateMipmap (GLenum target);
 import_from_js void glActiveTexture (GLenum texture);
+
 
 
 function GLuint glGetUniformLocation(GLuint Program, string Name)

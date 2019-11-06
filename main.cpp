@@ -99,8 +99,9 @@ function void LoadFontAtlas(memory_arena *Memory, font_atlas *FontAtlas)
 function void
 Flush(draw_buffer *Buffer)
 {
-    glBindBuffer(GL_ARRAY_BUFFER, Buffer->VertexBuffer);
     glBindVertexArray(Buffer->VertexArray);
+
+    glBindBuffer(GL_ARRAY_BUFFER, Buffer->VertexBuffer);
     glBufferSubData(GL_ARRAY_BUFFER, 0, Buffer->VertexCount*sizeof(Buffer->Vertices[0]), Buffer->Vertices);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Buffer->IndexBuffer);
@@ -268,12 +269,13 @@ PushText(string Text, m3x4 const &Transform = IdentityMatrix3x4)
 
 function void InitDrawBuffer(draw_buffer *Buffer)
 {
+    Buffer->VertexArray = glCreateVertexArray();
+    glBindVertexArray(Buffer->VertexArray);
+
     Buffer->VertexBuffer = glCreateBuffer();
     glBindBuffer(GL_ARRAY_BUFFER, Buffer->VertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, sizeof(Buffer->Vertices), 0, GL_STREAM_DRAW);
 
-    Buffer->VertexArray = glCreateVertexArray();
-    glBindVertexArray(Buffer->VertexArray);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
@@ -413,11 +415,14 @@ void main()
     glEnable(GL_BLEND);
     //glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-
+    glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
 }
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glViewport(0, 0, Width, Height);
+
     v2 MousePixels = UserInput.MousePosPixels;
     v2 RenderDim = v2{(f32)Width, (f32)Height};
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
@@ -520,7 +525,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     }
 
     m3x4 PlanetTransform = ZRotationN(Anim[4]+0.61f) * Scaling(10.0f);
-    PushBox(PlanetTransform, 0x40ffffff, 0x80666666, 0xa0444444, 0xff111111);
+    PushBox(PlanetTransform, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);
 
 
     Flush(&State.Default);
