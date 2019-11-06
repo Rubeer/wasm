@@ -1,17 +1,6 @@
 
 global constexpr f32 Pi32 = 3.14159265359f;
 
-function f32 Square(f32 V) { return V*V; }
-
-function s32 AbsoluteValue(s32 V) { return __builtin_abs(V); };
-
-function f32 SquareRoot(f32 V) { return __builtin_sqrtf(V); }
-function f32 AbsoluteValue(f32 V) { return __builtin_fabsf(V); };
-function f32 Floor(f32 V) { return __builtin_floorf(V); };
-function f32 Ceil(f32 V) { return __builtin_ceilf(V); };
-
-// TODO(robin): Convince llvm to use the wasm "f32.nearest" instruction here.. (it actually tries linking with roundf if you use __builtin_roundf)
-function f32 Round(f32 V) { return Floor(V + 0.5f); };
 
 function f32 Clamp01(f32 V)
 {

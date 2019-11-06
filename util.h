@@ -76,6 +76,18 @@ function void JS_Log(string String)
     JS_Log(String.Size, String.Contents);
 }
 
+function f64 AbsoluteValue(f64 V) { return __builtin_fabs(V); };
+function s32 AbsoluteValue(s32 V) { return __builtin_abs(V); };
+function f32 Square(f32 V) { return V*V; }
+function f32 SquareRoot(f32 V) { return __builtin_sqrtf(V); }
+function f32 AbsoluteValue(f32 V) { return __builtin_fabsf(V); };
+function f32 Floor(f32 V) { return __builtin_floorf(V); };
+function f32 Ceil(f32 V) { return __builtin_ceilf(V); };
+
+// TODO(robin): Convince llvm to use the wasm "f32.nearest" instruction here.. (it actually tries linking with roundf if you use __builtin_roundf)
+function f32 Round(f32 V) { return Floor(V + 0.5f); };
+
+
 
 template<typename number> constexpr
 function number Minimum(number A, number B)
@@ -283,18 +295,20 @@ function string FormatText_(string DestInit, string Format, va_list Args)
 
                 case 'f':
                 {
-                    NotImplemented;
-
                     // TODO(robin): NaN, denormals, etc
                     f64 Value = va_arg(Args, f64);
+#if 0
+                    NotImplemented;
+
                     u64 Bits = *(u64 *)&Value;
+                    u64 Sign = Bits & ((u64)1 << 63);
+
 
                     u64 MantissaMask = (((u64)1 << 52) - 1); 
                     u64 ExponentMask = (((u64)1 << 10) - 1); // TODO(robin): Last bit is assumed to be 1;
 
                     u64 Mantissa = Bits & MantissaMask;
                     u64 Exponent = (Bits >> 52) & ExponentMask;
-                    u64 Sign = Bits & ((u64)1 << 63);
 
                     u64 Upper = Mantissa >> Exponent;
                     u64 Lower = Mantissa & (((u64)1 << (Exponent+1)) - 1);
@@ -307,6 +321,29 @@ function string FormatText_(string DestInit, string Format, va_list Args)
                     U64ToAscii_Dec(&Dest, Upper);
                     Put('.');
                     U64ToAscii_Dec(&Dest, Lower);
+#else
+
+                    // TODO(robin): Do this properly, this method is not very precise
+                    
+                    u64 WholePart = (u64)AbsoluteValue(Value);
+
+                    f64 Scale = 100.0;
+                    f64 Fract = AbsoluteValue(Value - (f64)WholePart);
+                    u64 FractInt = (u64)((Fract * Scale) + 0.5);
+
+                    if(Value < 0.0)
+                        Put('-');
+                    U64ToAscii_Dec(&Dest, WholePart);
+                    Put('.');
+
+                    Scale *= 0.1;
+                    while(FractInt < (u64)Scale)
+                    {
+                        Put('0');
+                        Scale *= 0.1;
+                    }
+                    U64ToAscii_Dec(&Dest, FractInt);
+#endif
 
                 } break;
 

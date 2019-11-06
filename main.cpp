@@ -312,6 +312,7 @@ struct hit_test
 {
     v3 RayOrigin;
     v3 RayOriginOffset;
+    v3 RayDir;
     f32 LastHitDistance;
 };
 
@@ -512,7 +513,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glUseProgram(State.Default.Common.Program);
     glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
 
-    f32 Distance = 3.0f;
+    f32 Distance = 10.0f;
     v3 MouseWorldP = {};
     {
         v4 FromCamera = {0,0,0,1};
@@ -531,6 +532,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     hit_test HitTest = {};
     HitTest.RayOrigin = CameraP;
     HitTest.RayOriginOffset = MouseWorldP;
+    HitTest.RayDir = Normalize(MouseWorldP - CameraP);
     HitTest.LastHitDistance = F32Max;
 
     local_persist f32 SelectedFlyAnim;
@@ -560,12 +562,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         v3 Dim = Lerp(NormalDim, Curve[0], WeirdDim);
         v3 HalfDim = Dim*0.5f;
 
-        v3 Angles = {RandomUnilateral(&Random) + V + Anim[2],
-                     RandomUnilateral(&Random) + V + Anim[1],
-                     RandomUnilateral(&Random) + V + Anim[2]};
+        v3 Angles = {RandomUnilateral(&Random) - Anim[2],
+                     RandomUnilateral(&Random) - Anim[1],
+                     RandomUnilateral(&Random) - Anim[2]};
+        Angles.x = 0;
 
-
-        m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * ZYXRotationN(-Angles) * Translation(-P);
 
         u32 C0 = Red;
         u32 C1 = Green;
@@ -582,11 +583,17 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
         if(i == Selected || i == FlyOut)
         {
+            v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*1.5f;
             
-            P = Lerp(P, SmoothCurve01(SelectedFlyAnim), MouseWorldP);
+            f32 t = SmoothCurve01(SelectedFlyAnim);
+
+            Angles = Lerp(Angles, t, v3{0,0,0});
+            P = Lerp(P, t, FlyToP);
         }
 
-        if(RaycastBox(&HitTest, InverseBoxTransform))
+        m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * ZYXRotationN(-Angles) * Translation(-P);
+
+        if(i != Selected && RaycastBox(&HitTest, InverseBoxTransform))
         {
             if(HitTest.LastHitDistance < ClosestDistance)
             {
@@ -611,12 +618,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f);
             char Buf[128];
             string Text = FormatText(Buf, "Positie\n"
-                                          "x %d\n"
-                                          "y %d\n"
-                                          "z %d\n",
-                                          (s32)(100.0f*P.x),
-                                          (s32)(100.0f*P.y),
-                                          (s32)(100.0f*P.z));
+                                          "x %f\n"
+                                          "y %f\n"
+                                          "z %f\n",
+                                          P.x, P.y, P.z);
+
             PushText(Text, TextTransform);
         }
     }
@@ -644,7 +650,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
     }
 
-    m3x4 PlanetTransform = Translation(5.0f, 0, 0) * Scaling(10.0f, 9, 9) * ZRotationN(0.6f);// * Scaling(10.0f);
+    m3x4 PlanetTransform = Translation(5.0f, 0, 0) * Scaling(10.0f, 9, 9) * ZRotationN(Anim[4]);// * Scaling(10.0f);
 
     m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
     PushBox(PlanetTransform, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);
