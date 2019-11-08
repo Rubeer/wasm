@@ -240,10 +240,10 @@ void main()
 {
     VertColor.a = Color.a;
 
-    vec3 SkyLight = Color.rgb * LightFrom(vec3(0, -100.0, 500.0), 20000.0);
-    vec3 MouseLight = Color.rgb * LightFrom(MouseWorldP, 40.0);
+    float SkyLight = LightFrom(vec3(0, -100.0, 500.0), 20000.0);
+    float MouseLight = LightFrom(MouseWorldP, 40.0);
 
-    VertColor.rgb = clamp(SkyLight + MouseLight, vec3(0.0), vec3(1.0));
+    VertColor.rgb = Color.rgb*min(1.0, SkyLight + MouseLight);
 
     gl_Position = Transform*vec4(Position, 1.0);
 }
@@ -607,7 +607,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
         if(i == Selected || i == FlyOut)
         {
-            v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*1.5f;
+            v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
             
             f32 t = SmoothCurve01(SelectedFlyAnim);
 
@@ -677,7 +677,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(10.0f, 9, 9) * ZRotationN(Anim[4]);// * Scaling(10.0f);
 
     //m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
-    PushBox(PlanetTransform, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);
+    u32 C = 0xA0808080;
+    PushBox(PlanetTransform, C, C, C, C);
 
     //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
 
