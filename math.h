@@ -237,6 +237,11 @@ struct m3x4
     f32 E[3][4];
 };
 
+struct m3x3
+{
+    f32 E[3][3];
+};
+
 global constexpr m4x4 IdentityMatrix4x4 =
 {
     {{1,0,0,0},
@@ -250,6 +255,13 @@ global constexpr m3x4 IdentityMatrix3x4 =
     {{1,0,0,0},
      {0,1,0,0},
      {0,0,1,0}}
+};
+
+global constexpr m3x3 IdentityMatrix3x3 =
+{
+    {{1,0,0},
+     {0,1,0},
+     {0,0,1}}
 };
 
 struct m4x4_inv
@@ -321,7 +333,14 @@ function m3x4 To3x4(m4x4 const &M)
     return Result;
 }
 
-
+function v3 TransformAs3x3(m3x4 const &M, v3 V)
+{
+    v3 Result;
+    Result.x = V.x*M.E[0][0] + V.y*M.E[0][1] + V.z*M.E[0][2];
+    Result.y = V.x*M.E[1][0] + V.y*M.E[1][1] + V.z*M.E[1][2];
+    Result.z = V.x*M.E[2][0] + V.y*M.E[2][1] + V.z*M.E[2][2];
+    return Result;
+}
 
 function m3x4 operator*(m3x4 const &A, m3x4 const &B)
 {

@@ -58,9 +58,11 @@ function void InitCommonDrawBuffers(renderer_common *Renderer)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
+    glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, N));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
+    glVertexAttribPointer(2, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
 
 
     Renderer->IndexBuffer = glCreateBuffer();
@@ -80,6 +82,8 @@ vec3 LinearToSRGB_Approx(vec3 x)
     vec3 Result = (b * inversesqrt(x + a) - c) * x;
     return Result;
 }
+
+float Square(float x) {return x*x;}
 )HereDoc");
 
 import_from_js void JS_GetFontAtlas(void *Pixels, size PixelsSize, void *Geometry, size GeomSize);
@@ -136,9 +140,10 @@ function void InitTextRendering(memory_arena *Memory, renderer_text *TextRendere
     string Vert = Concat(Memory, CommonShaderHeader, S(R"HereDoc(
 uniform mat4 Transform;
 
-layout (location = 0) in vec3 Position;
-layout (location = 1) in vec2 UV;
-layout (location = 2) in vec4 Color;
+layout (location=0) in vec3 Position;
+layout (location=1) in vec3 Normal;
+layout (location=2) in vec2 UV;
+layout (location=3) in vec4 Color;
 
 out vec2 VertUV;
 out vec4 VertColor;
@@ -198,7 +203,7 @@ void main()
 
     glActiveTexture(GL_TEXTURE0);
     glUseProgram(TextRenderer->Common.Program);
-    glUniform1i((GLint)TextRenderer->TextureSampler, 0);
+    glUniform1i(TextRenderer->TextureSampler, 0);
 
 }
 
@@ -208,17 +213,39 @@ function void InitDefaultRendering(memory_arena *Memory, renderer_default *Defau
 
     string Vert = Concat(&FrameMemory, CommonShaderHeader, S(R"HereDoc(
 layout (location=0) in vec3 Position;
-layout (location=1) in vec2 UV;
-layout (location=2) in vec4 Color;
+layout (location=1) in vec3 Normal;
+layout (location=2) in vec2 UV;
+layout (location=3) in vec4 Color;
 
 out vec4 VertColor;
 
 uniform mat4 Transform;
+uniform vec3 MouseWorldP;
+
+float LightFrom(vec3 LightPosition, float Brightness)
+{
+    vec3 ToLight = LightPosition - Position;
+    float LengthSq = dot(ToLight, ToLight);
+
+    float InvLengthSq = 1.0 / LengthSq;
+    vec3 LightDir = ToLight * sqrt(InvLengthSq);
+
+    float Factor = max(0.0, dot(Normal, LightDir));
+    float LightStrength = Brightness * InvLengthSq;
+    float Result = LightStrength * Factor*Factor;
+    return Result;
+}
 
 void main()
 {
-    VertColor = Color;
-    gl_Position = Transform*vec4(Position, 1.0f);
+    VertColor.a = Color.a;
+
+    vec3 SkyLight = Color.rgb * LightFrom(vec3(0, -100.0, 500.0), 20000.0);
+    vec3 MouseLight = Color.rgb * LightFrom(MouseWorldP, 40.0);
+
+    VertColor.rgb = clamp(SkyLight + MouseLight, vec3(0.0), vec3(1.0));
+
+    gl_Position = Transform*vec4(Position, 1.0);
 }
 )HereDoc"));
 
@@ -236,6 +263,7 @@ void main()
 
     DefaultRender->Common.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
     DefaultRender->Common.Transform = glGetUniformLocation(DefaultRender->Common.Program, S("Transform"));
+    DefaultRender->MouseWorldP = glGetUniformLocation(DefaultRender->Common.Program, S("MouseWorldP"));
 
 }
 
@@ -297,13 +325,13 @@ function void PushQuadIndices(target_vertices_indices *Target,
 //        |/_ _|
 //       2      3
 
-    Target->I[0] = Target->FirstIndex + V0;
-    Target->I[1] = Target->FirstIndex + V2;
-    Target->I[2] = Target->FirstIndex + V1;
+    Target->I[0] = Target->FirstIndex + V2;
+    Target->I[1] = Target->FirstIndex + V1;
+    Target->I[2] = Target->FirstIndex + V0;
 
-    Target->I[3] = Target->FirstIndex + V2;
-    Target->I[4] = Target->FirstIndex + V3;
-    Target->I[5] = Target->FirstIndex + V1;
+    Target->I[3] = Target->FirstIndex + V1;
+    Target->I[4] = Target->FirstIndex + V2;
+    Target->I[5] = Target->FirstIndex + V3;
 
     Target->I += 6;
 }
@@ -340,12 +368,28 @@ function bool RaycastBox(hit_test *HitTest, m3x4 const &InverseBoxTransform)
     return Hit;
 }
 
+function void PushQuad_(target_vertices_indices *Target,
+                        v3 P0, v3 P1, v3 P2,v3 P3,
+                        u32 C0, u32 C1, u32 C2, u32 C3,
+                        v3 Normal)
+{
+    Target->V[0] = {P0, Normal, {}, C0};
+    Target->V[1] = {P1, Normal, {}, C1};
+    Target->V[2] = {P2, Normal, {}, C2};
+    Target->V[3] = {P3, Normal, {}, C3};
+    PushQuadIndices(Target, 0, 1, 2, 3);
+    Target->V += 4;
+    Target->FirstIndex += 4;
+}
+
 
 function void PushBox(m3x4 const &Transform,
-              u32 C04 = Red,
-              u32 C15 = Green,
-              u32 C26 = Blue,
-              u32 C37 = White)
+              u32 C0 = Red,
+              u32 C1 = Green,
+              u32 C2 = Blue,
+              u32 C3 = White,
+              u32 C4 = Black,
+              u32 C5 = Red)
 {
 
 //		   .4------5     4------5     4------5     4------5     4------5.
@@ -357,34 +401,30 @@ function void PushBox(m3x4 const &Transform,
 //		2------3'      2------3       2------3       2------3      `2------3
 //
 
-    target_vertices_indices Target = AllocateVerticesAndIndices(&State.Default.Common, 8, 6*6);
+    target_vertices_indices Target = AllocateVerticesAndIndices(&State.Default.Common, 6*4, 6*6);
 
-    Target.V[0].P = Transform * v3{-1, -1,  1};
-    Target.V[1].P = Transform * v3{ 1, -1,  1};
-    Target.V[2].P = Transform * v3{-1, -1, -1};
-    Target.V[3].P = Transform * v3{ 1, -1, -1};
+    v3 P0 = Transform * v3{-1, -1,  1};
+    v3 P1 = Transform * v3{ 1, -1,  1};
+    v3 P2 = Transform * v3{-1, -1, -1};
+    v3 P3 = Transform * v3{ 1, -1, -1};
+    v3 P4 = Transform * v3{-1,  1,  1};
+    v3 P5 = Transform * v3{ 1,  1,  1};
+    v3 P6 = Transform * v3{-1,  1, -1};
+    v3 P7 = Transform * v3{ 1,  1, -1};
 
-    Target.V[4].P = Transform * v3{-1,  1,  1};
-    Target.V[5].P = Transform * v3{ 1,  1,  1};
-    Target.V[6].P = Transform * v3{-1,  1, -1};
-    Target.V[7].P = Transform * v3{ 1,  1, -1};
+    v3 N0 = Normalize(TransformAs3x3(Transform, v3{ 0,-1, 0})); // Front
+    v3 N1 = Normalize(TransformAs3x3(Transform, v3{ 1, 0, 0})); // Right
+    v3 N2 = Normalize(TransformAs3x3(Transform, v3{-1, 0, 0})); // Left
+    v3 N3 = Normalize(TransformAs3x3(Transform, v3{ 0, 0, 1})); // Top
+    v3 N4 = Normalize(TransformAs3x3(Transform, v3{ 0, 0,-1})); // Bottom
+    v3 N5 = Normalize(TransformAs3x3(Transform, v3{ 0, 1, 0})); // Back
 
-    Target.V[0].C = C04;
-    Target.V[1].C = C15;
-    Target.V[2].C = C26;
-    Target.V[3].C = C37;
-    Target.V[4].C = C04;
-    Target.V[5].C = C15;
-    Target.V[6].C = C26;
-    Target.V[7].C = C37;
-
-    // TODO(robin): Triangle strip?
-    PushQuadIndices(&Target, 0, 1, 2, 3); // Front
-    PushQuadIndices(&Target, 1, 5, 3, 7); // Right
-    PushQuadIndices(&Target, 4, 0, 6, 2); // Left
-    PushQuadIndices(&Target, 4, 5, 0, 1); // Top
-    PushQuadIndices(&Target, 2, 3, 6, 7); // Bottom
-    PushQuadIndices(&Target, 5, 4, 7, 6); // Back
+    PushQuad_(&Target, P0, P1, P2, P3, C0, C0, C0, C0, N0); // Front
+    PushQuad_(&Target, P1, P5, P3, P7, C1, C1, C1, C1, N1); // Right
+    PushQuad_(&Target, P4, P0, P6, P2, C2, C2, C2, C2, N2); // Left
+    PushQuad_(&Target, P4, P5, P0, P1, C3, C3, C3, C3, N3); // Top
+    PushQuad_(&Target, P2, P3, P6, P7, C4, C4, C4, C4, N4); // Bottom
+    PushQuad_(&Target, P5, P4, P7, P6, C5, C5, C5, C5, N5); // Back
 }
 
 function void
@@ -440,7 +480,6 @@ PushText(string Text, m3x4 const &Transform = IdentityMatrix3x4)
         Target.V[3].C = White;
 
         PushQuadIndices(&Target, 0, 1, 2, 3);
-
         Target.V += 4;
         Target.FirstIndex += 4;
 
@@ -489,11 +528,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         Anim[i] += DeltaTime*Speeds[i];
     }
 
-    v3 CameraP = {0, -107, 6};
+    v3 OrbitCenter = {0, 107, -6};
+
+    v3 CameraP = {0, 0, 0};
 
     v3 Up = {0, 0, 1};
 
-    v3 CameraZ = Normalize(CameraP);
+    v3 CameraZ = Normalize(CameraP - OrbitCenter);
     //v3 CameraZ = Normalize(v3{0.2f,-1,0.2f});
     v3 CameraX = Normalize(Cross(Up, CameraZ));
     v3 CameraY = Cross(CameraZ, CameraX);
@@ -508,11 +549,6 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     RenderTransform.Forward = Projection.Forward * Camera.Forward;
     RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
 
-    glUseProgram(State.Text.Common.Program);
-    glUniformMatrix4fv(State.Text.Common.Transform, true, &RenderTransform.Forward);
-    glUseProgram(State.Default.Common.Program);
-    glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
-
     f32 Distance = 10.0f;
     v3 MouseWorldP = {};
     {
@@ -526,6 +562,14 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
         MouseWorldP = (RenderTransform.Inverse * ClipPos).xyz;
     }
+
+
+    glUseProgram(State.Text.Common.Program);
+    glUniformMatrix4fv(State.Text.Common.Transform, true, &RenderTransform.Forward);
+
+    glUseProgram(State.Default.Common.Program);
+    glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
+    glUniform3f(State.Default.MouseWorldP, MouseWorldP);
 
     random_state Random = DefaultSeed();
 
@@ -546,11 +590,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     {
         f32 V = i / (f32)Count;
 
-        v3 P;
-        P.x = 7.0f*RandomBilateral(&Random) + 100.0f*CosineApproxN(V+Anim[0]);
-        P.y = 7.0f*RandomBilateral(&Random) + 100.0f*SineApproxN(V+Anim[0]);
-
-        P.z = CosineApproxN(V + RandomBilateral(&Random)) * 4.0f;
+        v3 P = OrbitCenter;
+        P.x += 7.0f*RandomBilateral(&Random) + 100.0f*CosineApproxN(V+Anim[0]);
+        P.y += 7.0f*RandomBilateral(&Random) + 100.0f*SineApproxN(V+Anim[0]);
+        P.z += CosineApproxN(V + RandomBilateral(&Random)) * 4.0f;
 
         v3 Dim = v3{0.9f, 0.9f, 0.9f};
         v3 HalfDim = Dim*0.5f;
@@ -560,19 +603,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
                      RandomUnilateral(&Random) - Anim[2]};
         Angles.x = 0;
 
-
-        u32 C0 = Red;
-        u32 C1 = Green;
-        u32 C2 = Blue;
-        u32 C3 = White;
-
-        if(i == Selected)
-        {
-            C0 |= 0x00AAAAAA;
-            C1 |= 0x00AAAAAA;
-            C2 |= 0x00AAAAAA;
-            C3 |= 0x00AAAAAA;
-        }
+        u32 C = RandomSolidColor(&Random);
 
         if(i == Selected || i == FlyOut)
         {
@@ -594,16 +625,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
                 ClosestIndex = i;
             }
 
-            C0 |= 0x00555555;
-            C1 |= 0x00555555;
-            C2 |= 0x00555555;
-            C3 |= 0x00555555;
+            //C = White;
         }
 
         m3x4 UnscaledBoxTransform = Translation(P) * XYZRotationN(Angles);
-        m3x4 BoxTransform = UnscaledBoxTransform*Scaling(HalfDim);
+        m3x4 BoxTransform = Translation(P) * XYZRotationN(Angles) * Scaling(HalfDim);
 
-        PushBox(BoxTransform, C0, C1, C2, C3);
+        PushBox(BoxTransform, C,C,C,C,C,C);
 
 
         if(LengthSquared(CameraP - P) < Square(20.0f))
@@ -646,7 +674,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
     }
 
-    m3x4 PlanetTransform = Translation(5.0f, 0, 0) * Scaling(10.0f, 9, 9) * ZRotationN(Anim[4]);// * Scaling(10.0f);
+    m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(10.0f, 9, 9) * ZRotationN(Anim[4]);// * Scaling(10.0f);
 
     //m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
     PushBox(PlanetTransform, 0x40404040, 0x80666666, 0xa0444444, 0xff111111);

@@ -17,6 +17,7 @@ struct user_input
 struct vertex
 {
     v3 P;
+    v3 N;
     v2 UV;
     u32 C;
 };
@@ -74,6 +75,7 @@ struct renderer_text
 struct renderer_default
 {
     renderer_common Common;
+    GLuint MouseWorldP;
 };
 
 struct state

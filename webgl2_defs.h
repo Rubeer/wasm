@@ -97,7 +97,8 @@ import_from_js void glEnableVertexAttribArray (GLuint index);
 import_from_js void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 import_from_js GLuint glGetUniformLocation (GLuint Program, u32 NameLength, char *NamePtr);
 import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 const *Data);
-import_from_js void glUniform1i (GLint location, GLint v0);
+import_from_js void glUniform1i (GLuint location, GLint v0);
+import_from_js void glUniform3f (GLuint location, f32 x, f32 y, f32 z);
 
 import_from_js void glDrawArrays(GLenum mode, GLint first, GLsizei count);
 import_from_js void glDrawElements(GLenum mode, GLsizei count, GLenum type, GLintptr offset);
@@ -120,6 +121,11 @@ import_from_js GLuint JS_GL_CreateCompileAndLinkProgram(u32 VertLen, char *VertS
 function GLuint JS_GL_CreateCompileAndLinkProgram(string Vert, string Frag)
 {
     return JS_GL_CreateCompileAndLinkProgram(Vert.Size, Vert.Contents, Frag.Size, Frag.Contents);
+}
+
+function void glUniform3f(GLuint location, v3 V)
+{
+    glUniform3f(location, V.x, V.y, V.z);
 }
 
 

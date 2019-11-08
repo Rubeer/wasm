@@ -555,7 +555,7 @@ function random_state DefaultSeed()
 function s32 RandomBetween(random_state *State, s32 Min, s32 Max)
 {
     s32 Range = Max - Min;
-    s32 Result = Min + ((s32)xorshift32(State) % Range);
+    s32 Result = Min + (s32)(xorshift32(State) % (u32)Range);
     return Result;
 }
 
@@ -571,12 +571,12 @@ function f32 RandomBilateral(random_state *State)
     return -1.0f + 2.0f*RandomUnilateral(State);
 }
 
-function u32 RandomSolidColor(random_state *Random)
+function u32 RandomSolidColor(random_state *Random, u32 Limit = 256)
 {
-    u32 Result = ((u32)xorshift32(Random) % 255) << 0 | 
-                 ((u32)xorshift32(Random) % 255) << 8 | 
-                 ((u32)xorshift32(Random) % 255) << 16 |
-                 (u32)0xFF << 24;
+    u32 Result = ((u32)xorshift32(Random) % Limit) << 0 | 
+                 ((u32)xorshift32(Random) % Limit) << 8 | 
+                 ((u32)xorshift32(Random) % Limit) << 16 |
+                 ((u32)0xFF << 24);
     return Result;
 }
 

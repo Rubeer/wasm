@@ -25,6 +25,7 @@ glGetAttribLocation
 glGetUniformLocation
 glUniformMatrix4fv
 glUniform1i
+glUniform3f
 
 glCreateBuffer
 glBindBuffer

@@ -42,6 +42,7 @@ if(!gl)
 }
 
 
+
 function GetWasmString(Length, Pointer)
 {
     const Data = WasmMemory.subarray(Pointer, Pointer+Length);
@@ -99,6 +100,7 @@ Imports.glGenerateMipmap = function(Target) { gl.generateMipmap(Target); }
 Imports.glTexParameteri = function(Target, Var, Value) { gl.texParameteri(Target, Var, Value); }
 Imports.glActiveTexture = function(Texture) { gl.activeTexture(Texture); }
 Imports.glUniform1i = function(Location, Value) { gl.uniform1i(GLObjects[Location], Value); }
+Imports.glUniform3f = function(Location, x,y,z) { gl.uniform3f(GLObjects[Location], x,y,z); }
 
 Imports.glGetUniformLocation = function(Program, NameLen, NamePtr)
 {
@@ -264,6 +266,8 @@ async function Init()
 
 
     WasmExports.Init();
+    const AllExtensions = gl.getSupportedExtensions();
+    console.log(AllExtensions);
 
     let PrevTime = null;
     function RenderLoop(Now)
