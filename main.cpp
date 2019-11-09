@@ -488,6 +488,14 @@ PushText(string Text, m3x4 const &Transform = IdentityMatrix3x4)
 
 extern "C" unsigned char __heap_base;
 
+#define BOX_COUNT 4096
+struct box_animation
+{
+    quaternion Orient;
+    f32 Integral;
+};
+global box_animation BoxAnimations[BOX_COUNT];
+
 
 export_to_js void Init()
 {
@@ -502,6 +510,11 @@ export_to_js void Init()
     //glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
+
+    for(u32 i = 0; i < BOX_COUNT; ++i)
+    {
+        BoxAnimations[i].Orient.w = 1;
+    }
 }
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
@@ -549,11 +562,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     RenderTransform.Forward = Projection.Forward * Camera.Forward;
     RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
 
-    f32 Distance = 10.0f;
     v3 MouseWorldP = {};
     {
         v4 FromCamera = {0,0,0,1};
-        FromCamera.xyz = CameraP - Distance*CameraZ;
+        FromCamera.xyz = CameraP - 10.0f*CameraZ;
         v4 FromCameraClip = RenderTransform.Forward * FromCamera;
 
         v4 ClipPos;
@@ -563,13 +575,6 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         MouseWorldP = (RenderTransform.Inverse * ClipPos).xyz;
     }
 
-
-    glUseProgram(State.Text.Common.Program);
-    glUniformMatrix4fv(State.Text.Common.Transform, true, &RenderTransform.Forward);
-
-    glUseProgram(State.Default.Common.Program);
-    glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
-    glUniform3f(State.Default.MouseWorldP, MouseWorldP);
 
     random_state Random = DefaultSeed();
 
@@ -585,10 +590,19 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     u32 ClosestIndex = U32Max;
     f32 ClosestDistance = F32Max;
 
-    u32 Count = 4000;
-    for(u32 i = 0; i < Count; ++i)
+    glUseProgram(State.Text.Common.Program);
+    glUniformMatrix4fv(State.Text.Common.Transform, true, &RenderTransform.Forward);
+
+    glUseProgram(State.Default.Common.Program);
+    glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
+    glUniform3f(State.Default.MouseWorldP, HitTest.RayOrigin + HitTest.RayDir*7.5f);
+
+
+    for(u32 i = 0; i < BOX_COUNT; ++i)
     {
-        f32 V = i / (f32)Count;
+        box_animation *Box = BoxAnimations + i;
+
+        f32 V = i * (1.0f / BOX_COUNT);
 
         v3 P = OrbitCenter;
         P.x += 7.0f*RandomBilateral(&Random) + 100.0f*CosineApproxN(V+Anim[0]);
@@ -598,46 +612,60 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         v3 Dim = v3{0.9f, 0.9f, 0.9f};
         v3 HalfDim = Dim*0.5f;
 
-        v3 Angles = {RandomUnilateral(&Random) - Anim[2],
-                     RandomUnilateral(&Random) - Anim[1],
-                     RandomUnilateral(&Random) - Anim[2]};
-        Angles.x = 0;
-
-        u32 C = RandomSolidColor(&Random);
 
         if(i == Selected || i == FlyOut)
         {
             v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
-            
             f32 t = SmoothCurve01(SelectedFlyAnim);
-
-            Angles = Lerp(Angles, t, v3{0,0,0});
             P = Lerp(P, t, FlyToP);
         }
 
-        m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * ZYXRotationN(-Angles) * Translation(-P);
+        m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * QuaternionRotationMatrix(Conjugate(Box->Orient)) * Translation(-P);
+        bool RayHit = RaycastBox(&HitTest, InverseBoxTransform);
 
-        if(i != Selected && RaycastBox(&HitTest, InverseBoxTransform))
+        v3 AngleDiff = {RandomBilateral(&Random),
+                        RandomBilateral(&Random),
+                        RandomBilateral(&Random)};
+        if(i != Selected)
+        {
+
+            AngleDiff = AngleDiff * 0.1f * DeltaTime * (1.0f - Box->Integral);
+            quaternion Diff = QuaternionFromAnglesN(AngleDiff);
+            Box->Orient = Box->Orient * Diff;
+        }
+
+
+        if(RayHit || Selected == i)
+        {
+            Box->Integral = Minimum(1.0f, Box->Integral + DeltaTime*2.0f);
+            Box->Orient = LerpShortestPath(Box->Orient, Box->Integral*4.0f*DeltaTime, quaternion{0,0,0,1});
+        }
+
+        if(!RayHit)
+        {
+            Box->Integral = Maximum(0.0f, Box->Integral - DeltaTime*2.0f);
+        }
+
+        if(i != Selected && i != FlyOut && RayHit)
         {
             if(HitTest.LastHitDistance < ClosestDistance)
             {
                 ClosestDistance = HitTest.LastHitDistance;
                 ClosestIndex = i;
             }
-
-            //C = White;
         }
 
-        m3x4 UnscaledBoxTransform = Translation(P) * XYZRotationN(Angles);
-        m3x4 BoxTransform = Translation(P) * XYZRotationN(Angles) * Scaling(HalfDim);
+        m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
+        m3x4 BoxTransform = UnscaledBoxTransform * Scaling(HalfDim);
 
+        u32 C = RandomSolidColor(&Random);
         PushBox(BoxTransform, C,C,C,C,C,C);
 
 
         if(LengthSquared(CameraP - P) < Square(20.0f))
         {
-            m3x4 FrontFacing = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
-            m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * Scaling(1.0f) * FrontFacing;
+            m3x4 MakeUpright = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
+            m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * MakeUpright;
             char Buf[128];
             string Text = FormatText(Buf, 
                                           "Box #%u\n"

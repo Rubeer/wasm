@@ -1,4 +1,3 @@
-
 global constexpr f32 Pi32 = 3.14159265359f;
 
 
@@ -601,3 +600,113 @@ function m3x4 ZYXRotationN(v3 V)
 {
     return ZRotationN(V.x) * YRotationN(V.y) * XRotationN(V.z);
 }
+
+union quaternion
+{
+    struct
+    {
+        f32 x;
+        f32 y;
+        f32 z;
+        f32 w;
+    };
+
+    v4 V4;
+};
+
+
+function m3x4 QuaternionRotationMatrix(quaternion Q)
+{
+    f32 x = Q.x;
+    f32 y = Q.y;
+    f32 z = Q.z;
+    f32 w = Q.w;
+ 
+    m3x4 Result =
+    {
+         {{ 1 - 2*(y*y + z*z),     2*(x*y - z*w),     2*(x*z + y*w), 0 },
+          {     2*(x*y + z*w), 1 - 2*(x*x + z*z),     2*(y*z - x*w), 0 },
+          {     2*(x*z - y*w),     2*(y*z + x*w), 1 - 2*(x*x + y*y), 0 }}
+    };
+ 
+    return Result;
+}
+
+function quaternion operator*(quaternion A, quaternion B)
+{
+    quaternion Result;
+    Result.x =  A.x*B.w + A.y*B.z - A.z*B.y + A.w*B.x;
+    Result.y = -A.x*B.z + A.y*B.w + A.z*B.x + A.w*B.y;
+    Result.z =  A.x*B.y - A.y*B.x + A.z*B.w + A.w*B.z;
+    Result.w = -A.x*B.x - A.y*B.y - A.z*B.z + A.w*B.w;
+    return Result;
+}
+
+function quaternion Normalize(quaternion Q)
+{
+    quaternion Result;
+    Result.V4 = Normalize(Q.V4);
+    return Result;
+}
+
+function quaternion Lerp(quaternion A, f32 t, quaternion B)
+{
+    quaternion Result;
+    Result.V4 = Lerp(A.V4, t, B.V4);
+    return Result;
+}
+
+function quaternion QuaternionFromAnglesN(f32 X, f32 Y, f32 Z)
+{
+    f32 cX = CosineApproxN(X * 0.5f);
+    f32 sX = SineApproxN(X * 0.5f);
+    f32 cY = CosineApproxN(Y * 0.5f);
+    f32 sY = SineApproxN(Y * 0.5f);
+    f32 cZ = CosineApproxN(Z * 0.5f);
+    f32 sZ = SineApproxN(Z * 0.5f);
+
+    quaternion Result;
+    Result.x = cZ*cX*sY - sZ*sX*cY;
+    Result.y = sZ*cX*sY + cZ*sX*cY;
+    Result.z = sZ*cX*cY - cZ*sX*sY;
+    Result.w = cZ*cX*cY + sZ*sX*sY;
+
+    return Result;
+}
+
+function quaternion QuaternionFromAnglesN(v3 Angles)
+{
+    return QuaternionFromAnglesN(Angles.x, Angles.y, Angles.z);
+}
+
+function quaternion Conjugate(quaternion Q)
+{
+    return
+    {
+        -Q.x,
+        -Q.y,
+        -Q.z,
+         Q.w,
+    };
+}
+
+function quaternion LerpShortestPath(quaternion A, f32 t, quaternion B)
+{
+    f32 Cos = Dot(A.V4, B.V4);
+
+    if(Cos < 0.0f)
+    {
+        B = quaternion{-B.x, -B.y, -B.z, -B.w};
+    }
+
+    return Normalize(Lerp(A, t, B));
+}
+
+
+
+
+
+
+
+
+
