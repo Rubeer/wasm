@@ -224,6 +224,7 @@ async function Init()
 
     const WasmExports = Program.instance.exports;
     WasmMemory = new Uint8Array(WasmExports.memory.buffer);
+    WasmExports.Init();
 
     function ResizeHandler()
     {
@@ -264,16 +265,11 @@ async function Init()
         WasmExports.KeyPress(Event.keyCode, false);
     });
 
-
-    WasmExports.Init();
-    const AllExtensions = gl.getSupportedExtensions();
-    console.log(AllExtensions);
-
     let PrevTime = null;
     function RenderLoop(Now)
     {
         window.requestAnimationFrame(RenderLoop);
-        const DeltaTime = PrevTime ? Now - PrevTime : Now;
+        const DeltaTime = PrevTime ? (Now - PrevTime) : (1000.0/60.0);
         PrevTime = Now;
         WasmExports.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
     }
