@@ -571,6 +571,7 @@ function f32 RandomBilateral(random_state *State)
     return -1.0f + 2.0f*RandomUnilateral(State);
 }
 
+
 function u32 RandomSolidColor(random_state *Random, u32 Limit = 256)
 {
     u32 Result = ((u32)xorshift32(Random) % Limit) << 0 | 
@@ -581,4 +582,14 @@ function u32 RandomSolidColor(random_state *Random, u32 Limit = 256)
 }
 
 
+
+function u32 Pack01RGBA255(f32 R, f32 G, f32 B, f32 A = 1.0f)
+{
+    u32 Result = (u32)(R*255.0f + 0.5f) << 0 | 
+                 (u32)(G*255.0f + 0.5f) << 8 | 
+                 (u32)(B*255.0f + 0.5f) << 16 | 
+                 (u32)(A*255.0f + 0.5f) << 24;
+
+    return Result;
+}
 

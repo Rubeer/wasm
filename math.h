@@ -1,5 +1,5 @@
 global constexpr f32 Pi32 = 3.14159265359f;
-
+global constexpr f32 Tau32 = 6.28318530718f;
 
 function f32 Clamp01(f32 V)
 {
