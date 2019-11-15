@@ -508,26 +508,23 @@ function m4x4_inv
 CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
 {
     m4x4_inv Result;
+
     Result.Forward = MatrixAsRows4x4(X, Y, Z);
     v3 Translate = -1.0f * (Result.Forward * Position);
-    Result.Forward.E[0][3] += Translate.x;
-    Result.Forward.E[1][3] += Translate.y;
-    Result.Forward.E[2][3] += Translate.z;
+    Result.Forward.E[0][3] = Translate.x;
+    Result.Forward.E[1][3] = Translate.y;
+    Result.Forward.E[2][3] = Translate.z;
 
-    v3 InvX = X / LengthSquared(X);
-    v3 InvY = Y / LengthSquared(Y);
-    v3 InvZ = Z / LengthSquared(Z);
-
-    Result.Inverse = MatrixAsColumns4x4(InvX, InvY, InvZ);
-    v3 InvP = MatrixAsColumns4x4(InvX, InvY, InvZ) * Translate;
-
-    Result.Inverse.E[0][3] -= InvP.x;
-    Result.Inverse.E[1][3] -= InvP.y;
-    Result.Inverse.E[2][3] -= InvP.z;
+    Result.Inverse = MatrixAsColumns4x4(X, Y, Z);
+    Translate = -1.0f * (Result.Inverse * Translate);
+    Result.Inverse.E[0][3] = Translate.x;
+    Result.Inverse.E[1][3] = Translate.y;
+    Result.Inverse.E[2][3] = Translate.z;
 
     return Result;
 }
 
+// NOTE(robin): Inputs to functions with the "N" postfix are scaled to Tau (Angle of 1.0 is equivalent to Tau)
 function f32 SineApproxN(f32 x)
 {
     x -= 0.5f + Floor(x);
@@ -546,12 +543,12 @@ function f32 CosineApproxN(f32 x)
 
 function f32 SineApprox(f32 x)
 {
-    return SineApproxN(x * (0.5f/Pi32));
+    return SineApproxN(x * (1.0f/Tau32));
 }
 
 function f32 CosineApprox(f32 x)
 {
-    return CosineApproxN(x * (0.5f/Pi32));
+    return CosineApproxN(x * (1.0f/Tau32));
 }
 
 function m3x4 XRotationN(f32 v)
@@ -681,13 +678,12 @@ function quaternion QuaternionFromAnglesN(v3 Angles)
 
 function quaternion Conjugate(quaternion Q)
 {
-    return
-    {
-        -Q.x,
-        -Q.y,
-        -Q.z,
-         Q.w,
-    };
+    quaternion Result;
+    Result.x = -Q.x;
+    Result.y = -Q.y;
+    Result.z = -Q.z;
+    Result.w =  Q.w;
+    return Result;
 }
 
 function quaternion LerpShortestPath(quaternion A, f32 t, quaternion B)
@@ -696,7 +692,7 @@ function quaternion LerpShortestPath(quaternion A, f32 t, quaternion B)
 
     if(Cos < 0.0f)
     {
-        B = quaternion{-B.x, -B.y, -B.z, -B.w};
+        B = {-B.x, -B.y, -B.z, -B.w};
     }
 
     return Normalize(Lerp(A, t, B));

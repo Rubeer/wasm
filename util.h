@@ -102,7 +102,7 @@ function number Maximum(number A, number B)
 
 
 
-function void MemoryCopy(void *Dest, void *Source, size Size)
+function void MemoryCopy(void *Dest, void const *Source, size Size)
 {
     u8 *Dest8 = (u8 *)Dest;
     u8 *Source8 = (u8 *)Source;

@@ -102,8 +102,8 @@ export_to_js void Init()
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0, 0, Width, Height);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     v2 MousePixels = State.Input.MousePosPixels;
     v2 RenderDim = v2{(f32)Width, (f32)Height};
@@ -157,7 +157,6 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     }
 
 
-    random_state Random = DefaultSeed();
 
     hit_test HitTest = {};
     HitTest.RayOrigin = CameraP;
@@ -189,6 +188,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     Anim[0] += RotSpeed;
 
+    random_state Random = DefaultSeed();
     for(u32 i = 0; i < BOX_COUNT; ++i)
     {
         box_animation *Box = State.BoxAnimations + i;
@@ -206,12 +206,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         bool Selected = (i == State.SelectedBoxIndex);
         Box->tFlyToMouse += Selected ? DeltaTime : -DeltaTime;
         Box->tFlyToMouse = Clamp01(Box->tFlyToMouse);
-
-        {
-            v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
-            f32 t = SmoothCurve01(Box->tFlyToMouse);
-            P = Lerp(P, t, FlyToP);
-        }
+        v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
+        P = Lerp(P, SmoothCurve01(Box->tFlyToMouse), FlyToP);
 
         m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * QuaternionRotationMatrix(Conjugate(Box->Orient)) * Translation(-P);
         bool RayHit = RaycastBox(&HitTest, InverseBoxTransform);
@@ -236,11 +232,12 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             Box->tSmooth += DeltaTime*2.0f;
             Box->Orient = LerpShortestPath(Box->Orient, Box->tSmooth*4.0f*DeltaTime, quaternion{0,0,0,1});
         }
-        if(!RayHit)
+        else
         {
             Box->tSmooth -= DeltaTime*2.0f;
         }
         Box->tSmooth = Clamp01(Box->tSmooth);
+
 
         if(RayHit && !Selected)
         {
@@ -254,10 +251,10 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
         m3x4 BoxTransform = UnscaledBoxTransform * Scaling(HalfDim);
 
-        f32 OneThirdCurve = Tau32 / 3.0f;
-        f32 R = (0.5f*(1.0f + SineApproxN(V)));
-        f32 G = (0.5f*(1.0f + SineApproxN(V + OneThirdCurve*2)));
-        f32 B = (0.5f*(1.0f + SineApproxN(V + OneThirdCurve)));
+        f32 OneThird = 1.0f / 3.0f;
+        f32 B = (0.5f*(1.0f + SineApproxN(V + 0*OneThird)));
+        f32 R = (0.5f*(1.0f + SineApproxN(V + 1*OneThird)));
+        f32 G = (0.5f*(1.0f + SineApproxN(V + 2*OneThird)));
         //u32 C = RandomSolidColor(&Random);
         u32 C = Pack01RGBA255(R,G,B);
         PushBox(&State.Default, BoxTransform, C,C,C,C,C,C);
