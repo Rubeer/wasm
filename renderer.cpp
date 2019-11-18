@@ -1,13 +1,20 @@
 
-function void InitCommonDrawBuffers(renderer_common *Renderer)
+function void AllocateBuffers(memory_arena *Memory, renderer_common *Renderer, u32 MaxIndexCount, u32 MaxVertexCount = (1 << 16) - 1)
 {
+    Assert(MaxIndexCount >= MaxVertexCount);
+
+    Renderer->MaxIndexCount = MaxIndexCount;
+    Renderer->MaxVertexCount = MaxVertexCount;
+
+    Renderer->Vertices = PushArray(Memory, vertex, MaxVertexCount, ArenaFlag_NoClear);
+    Renderer->Indices = PushArray(Memory, u16, MaxIndexCount, ArenaFlag_NoClear);
+
     Renderer->VertexArray = glCreateVertexArray();
     glBindVertexArray(Renderer->VertexArray);
 
     Renderer->VertexBuffer = glCreateBuffer();
     glBindBuffer(GL_ARRAY_BUFFER, Renderer->VertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Renderer->Vertices), 0, GL_STREAM_DRAW);
-
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertex)*Renderer->MaxVertexCount*sizeof(vertex), 0, GL_STREAM_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
@@ -21,7 +28,7 @@ function void InitCommonDrawBuffers(renderer_common *Renderer)
 
     Renderer->IndexBuffer = glCreateBuffer();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Renderer->Indices), 0, GL_STREAM_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, Renderer->MaxIndexCount*sizeof(u16), 0, GL_STREAM_DRAW);
 }
 
 global string CommonShaderHeader = S(R"HereDoc(#version 300 es
@@ -41,9 +48,11 @@ float Square(float x) {return x*x;}
 )HereDoc");
 
 import_from_js void JS_GetFontAtlas(void *Pixels, size PixelsSize, void *Geometry, size GeomSize);
-function void InitTextRendering(memory_arena *Memory, renderer_text *TextRenderer)
+function void InitTextRendering(memory_arena *PermMem, memory_arena *TmpMem, renderer_text *TextRenderer)
 {
-    InitCommonDrawBuffers(&TextRenderer->Common);
+    u32 MaxVertexCount = (1 << 16) - 1;
+    u32 MaxIndexCount = (MaxVertexCount*6) / 4;
+    AllocateBuffers(PermMem, &TextRenderer->Common, MaxIndexCount, MaxVertexCount);
 
     // TOOD(robin): Don't hardcode the sizes
     u32 AtlasWidth = 256;
@@ -53,10 +62,11 @@ function void InitTextRendering(memory_arena *Memory, renderer_text *TextRendere
     size PixelsSize = PixelCount*4;
     size GeomPackedSize = sizeof(font_atlas_char_packed) * 256;
 
-    auto Pixels = (u8 *)PushSize(Memory, PixelsSize, ArenaFlag_NoClear);
-    auto GeomPacked = (font_atlas_char_packed *)PushSize(Memory, GeomPackedSize, ArenaFlag_NoClear);
+    auto Pixels = (u8 *)PushSize(TmpMem, PixelsSize, ArenaFlag_NoClear);
+    auto GeomPacked = (font_atlas_char_packed *)PushSize(TmpMem, GeomPackedSize, ArenaFlag_NoClear);
 
     JS_GetFontAtlas(Pixels, PixelsSize, GeomPacked, GeomPackedSize);
+    Printf("x");
 
     f32 Scale = 1.0f / 256.0f;
 
@@ -84,13 +94,13 @@ function void InitTextRendering(memory_arena *Memory, renderer_text *TextRendere
 
     TextRenderer->Texture = glCreateTexture();
     glBindTexture(GL_TEXTURE_2D, TextRenderer->Texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AtlasWidth, AtlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AtlasWidth, AtlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize/4, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 
 
-    string Vert = Concat(Memory, CommonShaderHeader, S(R"HereDoc(
+    string Vert = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 uniform mat4 Transform;
 
 layout (location=0) in vec3 Position;
@@ -110,7 +120,7 @@ void main()
 )HereDoc"));
 
 
-    string Frag = Concat(Memory, CommonShaderHeader, S(R"HereDoc(
+    string Frag = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 uniform sampler2D TextureSampler;
 
 in vec2 VertUV;
@@ -118,12 +128,6 @@ in vec4 VertColor;
 
 out vec4 FragColor;
 
-const float EdgeSmoothAmount = 2.0f; // In pixels
-const vec3 OutlineColor = vec3(0.0f);
-const float BorderThickness = 0.25;
-
-const float OutlineBegin = 0.5f;
-const float OutlineEnd  = OutlineBegin - BorderThickness;
 
 float SmoothEdge(float Border, float Norm, float Distance)
 {
@@ -137,8 +141,12 @@ void main()
     float Distance = texture(TextureSampler, VertUV).r;
 
     vec2 Derivative = vec2(dFdx(Distance), dFdy(Distance));
+    const float EdgeSmoothAmount = 2.0f; // In pixels
     float Norm = EdgeSmoothAmount * length(Derivative);
 
+    const vec3 OutlineColor = vec3(0.0);
+    const float OutlineBegin = 0.5;
+    const float OutlineEnd  = OutlineBegin - 0.25;
 
     vec3 Color = mix(OutlineColor, VertColor.rgb, SmoothEdge(OutlineBegin, Norm, Distance));
 
@@ -146,7 +154,7 @@ void main()
     if(FragColor.a < 0.00001f) discard;
 
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
-    FragColor.rgb *= FragColor.a;
+    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
 }
 )HereDoc"));
 
@@ -160,31 +168,28 @@ void main()
 
 }
 
-function void InitDefaultRendering(memory_arena *Memory, renderer_default *DefaultRender)
+function void InitDefaultRendering(memory_arena *PermMem, memory_arena *TmpMem, renderer_default *DefaultRender)
 {
-    InitCommonDrawBuffers(&DefaultRender->Common);
+    u32 MaxVertexCount = (1 << 16) - 1;
+    u32 MaxIndexCount = (MaxVertexCount*6) / 4;
+    AllocateBuffers(PermMem, &DefaultRender->Common, MaxIndexCount, MaxVertexCount);
 
-    string Vert = Concat(Memory, CommonShaderHeader, S(R"HereDoc(
+    string Vert = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 layout (location=0) in vec3 Position;
 layout (location=1) in vec3 Normal;
 layout (location=2) in vec2 UV;
 layout (location=3) in vec4 Color;
 
-out vec4 VertColor;
-
 uniform mat4 Transform;
 uniform vec3 MouseWorldP;
+
+out vec4 VertColor;
 
 float LightFrom(vec3 LightPosition, float Brightness)
 {
     vec3 ToLight = LightPosition - Position;
-    float LengthSq = dot(ToLight, ToLight);
-
-    float InvLengthSq = 1.0 / LengthSq;
-    vec3 LightDir = ToLight * sqrt(InvLengthSq);
-
-    float Factor = max(0.0, dot(Normal, LightDir));
-    float LightStrength = Brightness * InvLengthSq;
+    float LightStrength = Brightness / dot(ToLight, ToLight);
+    float Factor = max(0.0, dot(Normal, normalize(ToLight)));
     float Result = LightStrength * Factor*Factor;
     return Result;
 }
@@ -203,7 +208,7 @@ void main()
 )HereDoc"));
 
 
-    string Frag = Concat(Memory, CommonShaderHeader, S(R"HereDoc(
+    string Frag = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 in vec4 VertColor;
 out vec4 FragColor;
 
@@ -226,10 +231,10 @@ Flush(renderer_common *Renderer)
     glBindVertexArray(Renderer->VertexArray);
 
     glBindBuffer(GL_ARRAY_BUFFER, Renderer->VertexBuffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, Renderer->VertexCount*sizeof(Renderer->Vertices[0]), Renderer->Vertices);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, Renderer->VertexCount*sizeof(vertex), Renderer->Vertices);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, Renderer->IndexCount*sizeof(Renderer->Indices[0]), Renderer->Indices);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, Renderer->IndexCount*sizeof(u16), Renderer->Indices);
 
     glUseProgram(Renderer->Program);
 
@@ -243,8 +248,8 @@ Flush(renderer_common *Renderer)
 function target_vertices_indices
 AllocateVerticesAndIndices(renderer_common *Renderer, u32 RequestedVertexCount, u32 RequestedIndexCount)
 {
-    if(Renderer->VertexCount + RequestedVertexCount >= ArrayCount(Renderer->Vertices) ||
-       Renderer->IndexCount + RequestedIndexCount >= ArrayCount(Renderer->Indices)) 
+    if(Renderer->VertexCount + RequestedVertexCount > Renderer->MaxVertexCount ||
+       Renderer->IndexCount + RequestedIndexCount > Renderer->MaxIndexCount) 
     {
         Flush(Renderer);
     }

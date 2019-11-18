@@ -1,4 +1,5 @@
 
+extern "C" unsigned char __heap_base;
 
 #include "util.h"
 #include "math.h"
@@ -6,13 +7,11 @@
 
 #include "renderer.h"
 #include "main.h"
-
-#include "renderer.cpp"
-
 global state State;
 
-global u8 __FrameMemory[1024*1024*8];
-global memory_arena FrameMemory = MemoryArenaFromByteArray(__FrameMemory);
+#include "util.cpp"
+#include "renderer.cpp"
+
 
 
 export_to_js void MouseMove(s32 X, s32 Y)
@@ -74,16 +73,21 @@ function bool RaycastBox(hit_test *HitTest, m3x4 const &InverseBoxTransform)
 }
 
 
-extern "C" unsigned char __heap_base;
 
-
+import_from_js void JS_GrowMemory(s32 PageCount);
 
 export_to_js void Init()
 {
-    Printf("%u", (u32)&__heap_base / 1024);
+    memory_arena *PermanentMemory = &State.PermanentMemory;
+    memory_arena *FrameMemory = &State.FrameMemory;
 
-    InitDefaultRendering(&FrameMemory, &State.Default);
-    InitTextRendering(&FrameMemory, &State.Text);
+    PermanentMemory->Buffer.Size = GetHeapSize();
+    PermanentMemory->Buffer.Contents = (char *)&__heap_base;
+
+    FrameMemory->Buffer = PushBuffer(PermanentMemory, Megabytes(8), ArenaFlag_NoClear);
+
+    InitDefaultRendering(PermanentMemory, FrameMemory, &State.Default);
+    InitTextRendering(PermanentMemory, FrameMemory, &State.Text);
 
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
@@ -92,11 +96,13 @@ export_to_js void Init()
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
 
+    State.BoxAnimations = PushArray(PermanentMemory, box_animation, BOX_COUNT);
     for(u32 i = 0; i < BOX_COUNT; ++i)
     {
         State.BoxAnimations[i].Orient.w = 1;
     }
     State.SelectedBoxIndex = U32Max;
+
 
 }
 
@@ -104,6 +110,24 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
     glViewport(0, 0, Width, Height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    {
+        local_persist f32 dtSamples[64];
+        local_persist f32 dtAverage;
+        local_persist u32 dtSampleIndex;
+        local_persist size dtSampleCount;
+        dtSamples[dtSampleIndex] = DeltaTime;
+        dtAverage += DeltaTime;
+        dtSampleIndex = (dtSampleIndex + 1) % ArrayCount(dtSamples);
+        dtAverage -= dtSamples[dtSampleIndex];
+        dtSampleCount = Minimum(ArrayCount(dtSamples), dtSampleCount + 1);
+
+#if 1
+        if(dtSampleCount > 2)
+            DeltaTime = dtAverage / (dtSampleCount-1);
+#endif
+    }
+
 
     v2 MousePixels = State.Input.MousePosPixels;
     v2 RenderDim = v2{(f32)Width, (f32)Height};
@@ -305,13 +329,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glClear(GL_DEPTH_BUFFER_BIT);
 
     char Buf[32];
-    string HudText = FormatText(Buf, "%f ms", DeltaTime*1000.0f);
+    string HudText = FormatText(Buf, "%f fps (%f ms)", 1.0f / DeltaTime, DeltaTime*1000.0f);
     PushText(&State.Text, HudText, Scaling(0.3f));
 
 
     Flush(&State.Text.Common);
 
-    Reset(&FrameMemory);
+    Reset(&State.FrameMemory);
 }
 
 

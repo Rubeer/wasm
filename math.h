@@ -510,16 +510,16 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     m4x4_inv Result;
 
     Result.Forward = MatrixAsRows4x4(X, Y, Z);
-    v3 Translate = -1.0f * (Result.Forward * Position);
-    Result.Forward.E[0][3] = Translate.x;
-    Result.Forward.E[1][3] = Translate.y;
-    Result.Forward.E[2][3] = Translate.z;
+    v3 ForwardTranslation = -1.0f * (Result.Forward * Position);
+    Result.Forward.E[0][3] = ForwardTranslation.x;
+    Result.Forward.E[1][3] = ForwardTranslation.y;
+    Result.Forward.E[2][3] = ForwardTranslation.z;
 
     Result.Inverse = MatrixAsColumns4x4(X, Y, Z);
-    Translate = -1.0f * (Result.Inverse * Translate);
-    Result.Inverse.E[0][3] = Translate.x;
-    Result.Inverse.E[1][3] = Translate.y;
-    Result.Inverse.E[2][3] = Translate.z;
+    v3 InverseTranslation = -1.0f * (Result.Inverse * ForwardTranslation);
+    Result.Inverse.E[0][3] = InverseTranslation.x;
+    Result.Inverse.E[1][3] = InverseTranslation.y;
+    Result.Inverse.E[2][3] = InverseTranslation.z;
 
     return Result;
 }

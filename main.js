@@ -4,10 +4,10 @@ const Imports = {};
 //const MemoryPageCount = 2048;
 //const MemorySize = MemoryPageCount * 65536;
 //Imports.memory = new WebAssembly.Memory({initial:MemoryPageCount});
-let WasmMemory = null;//new Uint8Array(Imports.memory.buffer);
+//let WasmMemory = null;//new Uint8Array(Imports.memory.buffer);
+let WasmMemory = null;
 const GLObjects = new Array();
 const ASCIIDecoder = new TextDecoder("ascii");
-
 
 
 async function LoadImageAsRawPixels(FileName)
@@ -45,7 +45,7 @@ if(!gl)
 
 function GetWasmString(Length, Pointer)
 {
-    const Data = WasmMemory.subarray(Pointer, Pointer+Length);
+    const Data = new Uint8Array(WasmMemory.buffer, Pointer, Length);
     return ASCIIDecoder.decode(Data);
 }
 
@@ -143,7 +143,7 @@ Imports.glBufferData = function(Target, Size, DataPtr, UsageHint)
 {
     if(DataPtr != 0)
     {
-        const Data = WasmMemory.subarray(DataPtr, DataPtr+Size);
+        const Data = new Uint8Array(WasmMemory, DataPtr, Size);
         gl.bufferData(Target, Data, UsageHint); // Allocate&upload to GPU
     }
     else
@@ -154,13 +154,13 @@ Imports.glBufferData = function(Target, Size, DataPtr, UsageHint)
 
 Imports.glBufferSubData = function(Target, Offset, Size, DataPtr)
 {
-    const Data = WasmMemory.subarray(DataPtr, DataPtr+Size);
+    const Data = new Uint8Array(WasmMemory.buffer, DataPtr, Size);
     gl.bufferSubData(Target, Offset, Data);
 }
 
 Imports.glTexImage2D = function(Target, Level, InternalFormat, Width, Height, Border, Format, Type, DataPtr, DataSize, Offset)
 {
-    const Data = WasmMemory.subarray(DataPtr, DataPtr + DataSize);
+    const Data = new Uint8Array(WasmMemory.buffer, DataPtr, DataSize);
     gl.texImage2D(Target, Level, InternalFormat, Width, Height, Border, Format, Type, Data, Offset);
 }
 
@@ -209,8 +209,8 @@ Imports.JS_GetFontAtlas = function(PixelsPtr, PixelsSize, GeomPtr, GeomSize)
     if(GeomSize != FontAtlasGeom.byteLength)
         throw Error("Invalid font atlas geom buffer size, got :"+GeomSize+",  expected "+FontAtlasGeom.byteLength);
 
-    new Uint8Array(WasmMemory.buffer, PixelsPtr, PixelsSize).set(new Uint8Array(FontAtlasPixels, 0, PixelsSize));
-    new Uint8Array(WasmMemory.buffer, GeomPtr, GeomSize).set(new Uint8Array(FontAtlasGeom, 0, GeomSize));
+    new Uint8Array(WasmMemory.buffer, PixelsPtr, PixelsSize).set(new Uint8Array(FontAtlasPixels));
+    new Uint8Array(WasmMemory.buffer, GeomPtr, GeomSize).set(new Uint8Array(FontAtlasGeom));
 }
 
 
@@ -223,7 +223,7 @@ async function Init()
     Program = await Program;
 
     const WasmExports = Program.instance.exports;
-    WasmMemory = new Uint8Array(WasmExports.memory.buffer);
+    WasmMemory = WasmExports.memory;
     WasmExports.Init();
 
     function ResizeHandler()

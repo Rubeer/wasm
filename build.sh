@@ -16,7 +16,7 @@ make_cpp_dumb="-nostdinc++ -fno-exceptions -fno-rtti -fno-threadsafe-statics -fw
 
 # Translate C++ to LLVM bytecode
 echo clang
-clang -c -emit-llvm -O2 -ffast-math --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
+clang -c -emit-llvm -O2 -ffast-math -ffreestanding --target=wasm32 -nostdlib -std=c++11 -fvisibility=hidden $make_cpp_dumb $warning_flags $DIR/main.cpp
 
 if [[ $? -eq 0 ]]
 then
@@ -31,7 +31,7 @@ then
     
     # Link, add js function imports
     echo wasm-ld
-    wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-all --stack-first
+    wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-all --stack-first --initial-memory=67108864
 
     # Strip out static variable bloat (zeroes)
     echo wasm-opt

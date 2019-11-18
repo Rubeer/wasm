@@ -58,10 +58,12 @@ struct renderer_common
     GLuint IndexBuffer;
 
     u32 VertexCount;
+    u32 MaxVertexCount;
     u32 IndexCount;
+    u32 MaxIndexCount;
 
-    vertex Vertices[(1 << 16) - 1];
-    u16 Indices[ArrayCount(Vertices)*6*6];
+    vertex *Vertices;
+    u16 *Indices;
 };
 
 
@@ -72,7 +74,6 @@ struct renderer_text
     GLuint Texture;
     GLuint TextureSampler;
     font_atlas_char Geometry[256];
-
 };
 
 struct renderer_default
