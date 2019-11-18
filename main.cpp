@@ -96,14 +96,14 @@ export_to_js void Init()
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
 
-    State.BoxAnimations = PushArray(PermanentMemory, box_animation, BOX_COUNT);
-    for(u32 i = 0; i < BOX_COUNT; ++i)
+    State.MaxBoxCount = 4096;
+    State.BoxCount = State.MaxBoxCount;
+    State.BoxAnimations = PushArray(PermanentMemory, box_animation, State.MaxBoxCount);
+    for(u32 i = 0; i < State.MaxBoxCount; ++i)
     {
         State.BoxAnimations[i].Orient.w = 1;
     }
     State.SelectedBoxIndex = U32Max;
-
-
 }
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
@@ -213,11 +213,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     Anim[0] += RotSpeed;
 
     random_state Random = DefaultSeed();
-    for(u32 i = 0; i < BOX_COUNT; ++i)
+    for(u32 i = 0; i < State.BoxCount; ++i)
     {
         box_animation *Box = State.BoxAnimations + i;
 
-        f32 V = i * (1.0f / BOX_COUNT);
+        f32 V = (f32)i / (f32)State.BoxCount;
 
         v3 P = OrbitCenter;
         P.x += 7.0f*RandomBilateral(&Random) + 100.0f*CosineApproxN(V+Anim[0]);
@@ -283,7 +283,6 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         u32 C = Pack01RGBA255(R,G,B);
         PushBox(&State.Default, BoxTransform, C,C,C,C,C,C);
 
-
         if(LengthSquared(CameraP - P) < Square(30.0f))
         {
             m3x4 MakeUpright = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
@@ -330,7 +329,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     char Buf[32];
     string HudText = FormatText(Buf, "%f fps (%f ms)", 1.0f / DeltaTime, DeltaTime*1000.0f);
-    PushText(&State.Text, HudText, Scaling(0.3f));
+    PushText(&State.Text, HudText, Scaling(0.4f));
 
 
     Flush(&State.Text.Common);

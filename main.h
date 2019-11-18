@@ -15,7 +15,6 @@ struct user_input
 };
 
 
-#define BOX_COUNT 2048
 struct box_animation
 {
     quaternion Orient;
@@ -25,6 +24,8 @@ struct box_animation
 
 struct state
 {
+    u32 BoxCount;
+    u32 MaxBoxCount;
     box_animation *BoxAnimations;
     u32 SelectedBoxIndex;
 

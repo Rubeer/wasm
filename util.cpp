@@ -39,8 +39,9 @@ extern "C" void *memset(void *Dest, int ValueInit, size Size)
     // NOTE(robin): Write 8 bytes at a time (speed)
     u64 *Dest64 = (u64 *)Dest8;
     u64 Packed = Value;
-    Packed |= (Packed << 8) | (Packed << 16) | (Packed << 24);
-    Packed |= (Packed << 32);
+    Packed = (Packed << 0)  | (Packed << 8)  | (Packed << 16) | (Packed << 24) |
+             (Packed << 32) | (Packed << 40) | (Packed << 48) | (Packed << 56);
+
     while(Size >= 8)
     {
         *Dest64++ = Packed;
@@ -253,8 +254,13 @@ function string FormatText_(string DestInit, string Format, va_list Args)
                     u64 WholePart = (u64)AbsoluteValue(Value);
 
                     f64 Scale = 100.0;
-                    f64 Fract = AbsoluteValue(Value - (f64)WholePart);
-                    u64 FractInt = (u64)((Fract * Scale) + 0.5);
+                    f64 Fract = Scale*AbsoluteValue(Value - (f64)WholePart) + 0.5;
+                    if(Fract >= Scale)
+                    {
+                        Fract = 0;
+                        WholePart += 1;
+                    }
+                    u64 FractInt = (u64)Fract;
 
                     if(Value < 0.0)
                         Put('-');
