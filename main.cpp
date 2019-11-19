@@ -1,5 +1,9 @@
 
 extern "C" unsigned char __heap_base;
+extern "C" unsigned char __tls_size;
+extern "C" unsigned char __global_base;
+extern "C" unsigned char __data_end;
+
 
 #include "util.h"
 #include "math.h"
@@ -73,17 +77,12 @@ function bool RaycastBox(hit_test *HitTest, m3x4 const &InverseBoxTransform)
 }
 
 
-
-import_from_js void JS_GrowMemory(s32 PageCount);
-
 export_to_js void Init()
 {
     memory_arena *PermanentMemory = &State.PermanentMemory;
     memory_arena *FrameMemory = &State.FrameMemory;
-
     PermanentMemory->Buffer.Size = GetHeapSize();
     PermanentMemory->Buffer.Contents = (char *)&__heap_base;
-
     FrameMemory->Buffer = PushBuffer(PermanentMemory, Megabytes(8), ArenaFlag_NoClear);
 
     InitDefaultRendering(PermanentMemory, FrameMemory, &State.Default);
@@ -111,44 +110,28 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glViewport(0, 0, Width, Height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    {
-        local_persist f32 dtSamples[64];
-        local_persist f32 dtAverage;
-        local_persist u32 dtSampleIndex;
-        local_persist size dtSampleCount;
-        dtSamples[dtSampleIndex] = DeltaTime;
-        dtAverage += DeltaTime;
-        dtSampleIndex = (dtSampleIndex + 1) % ArrayCount(dtSamples);
-        dtAverage -= dtSamples[dtSampleIndex];
-        dtSampleCount = Minimum(ArrayCount(dtSamples), dtSampleCount + 1);
-
-#if 1
-        if(dtSampleCount > 2)
-            DeltaTime = dtAverage / (dtSampleCount-1);
-#endif
-    }
-
-
     v2 MousePixels = State.Input.MousePosPixels;
     v2 RenderDim = v2{(f32)Width, (f32)Height};
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
     MouseClipSpace.y = -MouseClipSpace.y;
 
+    State.BoxCount = (State.BoxCount + 1) % State.MaxBoxCount;
+    f32 Radius = (f32)State.BoxCount * 0.03f;
 
     local_persist f32 Anim[5] = {0, 0.15f, 0.415f, 0.865f, 0};
-    f32 Speeds[ArrayCount(Anim)] = {0.001f, 0.1f, 0.1f, 0.1f, 0.01f};
+    f32 Speeds[ArrayCount(Anim)] = {0.000015f*Radius, 0.1f, 0.1f, 0.1f, 0.01f};
     f32 Curve[ArrayCount(Anim)];
     for(size i = 0; i < ArrayCount(Anim); ++i)
     {
         if(Anim[i] >= 1.0f)
         {
-            Anim[i] = 0.0f;
+            Anim[i] -= 1.0f;
         }
         Curve[i] = SmoothCurve010(Anim[i]);
         Anim[i] += DeltaTime*Speeds[i];
     }
 
-    v3 OrbitCenter = {0, 107, -6};
+    v3 OrbitCenter = {0, Radius + 7, -6};
     v3 CameraP = {0, 0, 0};
     v3 Up = {0, 0, 1};
 
@@ -212,6 +195,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     Anim[0] += RotSpeed;
 
+    v3 PrevP = {};
+
     random_state Random = DefaultSeed();
     for(u32 i = 0; i < State.BoxCount; ++i)
     {
@@ -220,8 +205,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         f32 V = (f32)i / (f32)State.BoxCount;
 
         v3 P = OrbitCenter;
-        P.x += 7.0f*RandomBilateral(&Random) + 100.0f*CosineApproxN(V+Anim[0]);
-        P.y += 7.0f*RandomBilateral(&Random) + 100.0f*SineApproxN(V+Anim[0]);
+        P.x += (4.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*CosineApproxN(V+Anim[0]);
+        P.y += (4.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*SineApproxN(V+Anim[0]);
         P.z += CosineApproxN(V + RandomBilateral(&Random)) * 4.0f;
 
         v3 Dim = v3{0.9f, 0.9f, 0.9f};
@@ -233,9 +218,18 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
         P = Lerp(P, SmoothCurve01(Box->tFlyToMouse), FlyToP);
 
+        v3 P0toP1 = PrevP - P;
+        v3 Z = Normalize(P0toP1);
+        v3 X = Normalize(Cross(Up, Z));
+        v3 Y = Cross(Z, X);
+        f32 HalfLen = 0.5f*Length(P0toP1);
+        m3x4 LineTransform = Translation(P) * MatrixAsColumns3x4(X, Y, Z) * Translation(0,0,HalfLen) * Scaling(0.05f,0.05f,HalfLen);
+        PushBox(&State.Default, LineTransform);
+        PrevP = P;
+
+        // TODO(robin) Symbolically solve
         m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * QuaternionRotationMatrix(Conjugate(Box->Orient)) * Translation(-P);
         bool RayHit = RaycastBox(&HitTest, InverseBoxTransform);
-
 
         v3 AngleDiff = {RandomBilateral(&Random),
                         RandomBilateral(&Random),
@@ -272,6 +266,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             }
         }
 
+        // TODO(robin) Symbolically solve
         m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
         m3x4 BoxTransform = UnscaledBoxTransform * Scaling(HalfDim);
 
@@ -282,10 +277,12 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         //u32 C = RandomSolidColor(&Random);
         u32 C = Pack01RGBA255(R,G,B);
         PushBox(&State.Default, BoxTransform, C,C,C,C,C,C);
+        //PushBox(&State.Default, P, Dim, Box->Orient, C,C,C,C,C,C);
 
         if(LengthSquared(CameraP - P) < Square(30.0f))
         {
             m3x4 MakeUpright = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
+            // TODO(robin) Symbolically solve
             m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * MakeUpright;
             char Buf[128];
             string Text = FormatText(Buf, 
@@ -300,6 +297,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         }
     }
 
+
     button *Left = &State.Input.MouseLeft;
     if(Left->HalfTransitionCount && Left->EndedDown)
     {
@@ -307,30 +305,24 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         State.SelectedBoxIndex = ClosestIndex;
     }
 
-    m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(10.0f, 9, 9) * ZRotationN(Anim[4]);// * Scaling(10.0f);
+    m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(Minimum(Radius*0.1f, 10.0f)) * ZRotationN(Anim[4]);// * Scaling(10.0f);
 
     //m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
     u32 C = 0xA0808080;
     PushBox(&State.Default, PlanetTransform, C,C,C,C,C,C);
-
     //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
 
 
     Flush(&State.Default.Common);
     Flush(&State.Text.Common);
 
-
     m4x4 HUDProj = HUDProjection(Width, Height);
     glUseProgram(State.Text.Common.Program);
     glUniformMatrix4fv(State.Text.Common.Transform, true, &HUDProj);
 
-
-    glClear(GL_DEPTH_BUFFER_BIT);
-
     char Buf[32];
     string HudText = FormatText(Buf, "%f fps (%f ms)", 1.0f / DeltaTime, DeltaTime*1000.0f);
     PushText(&State.Text, HudText, Scaling(0.4f));
-
 
     Flush(&State.Text.Common);
 

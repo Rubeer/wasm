@@ -31,6 +31,8 @@ constexpr f32 F32Max = 3.40282347e+38F;
 #define local_persist static
 #define global static
 
+#define force_inline inline __attribute__((__always_inline__))
+
 #define ArrayCount(x) (sizeof(x) / sizeof(*(x)))
 
 #define Kilobytes(x) ((u64)(x) * 1024)

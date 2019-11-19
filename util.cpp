@@ -281,12 +281,7 @@ function string FormatText_(string DestInit, string Format, va_list Args)
                 case 'c':
                 {
                     int Value = va_arg(Args, int);
-
-                    if(Dest.Size)
-                    {
-                        Dest.Contents[0] = (char)Value;
-                        Advance(&Dest);
-                    }
+                    Put((char)Value);
                 } break;
 
                 case 'S':

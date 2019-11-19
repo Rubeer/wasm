@@ -5,7 +5,7 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 cp $DIR/index.html /usr/share/nginx/html/
-cp $DIR/main.js /usr/share/nginx/html/
+cp $DIR/*.js /usr/share/nginx/html/
 
 mkdir -p $DIR/bin
 pushd $DIR/bin > /dev/null
@@ -27,15 +27,15 @@ then
     
     # Compile to WebAssembly
     echo llc
-    llc -O3 -filetype=obj main.bc -o main.o
+    llc -O3 -filetype=obj main.bc -o main.o #-mattr=+bulk-memory -mattr=+atomics
     
     # Link, add js function imports
     echo wasm-ld
-    wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-all --stack-first --initial-memory=67108864
+    wasm-ld --no-entry main.o -o main.wasm --strip-all -allow-undefined-file $DIR/js_imported_functions.syms --export-all --stack-first --initial-memory=67108864 #--max-memory=536870912 --shared-memory
 
     # Strip out static variable bloat (zeroes)
     echo wasm-opt
-    wasm-opt -O2 main.wasm -o main.wasm
+    wasm-opt -O2 main.wasm -o main.wasm #--enable-bulk-memory --enable-threads
     
     cp main.wasm /usr/share/nginx/html/
 fi

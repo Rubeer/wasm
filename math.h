@@ -1,4 +1,5 @@
-global constexpr f32 Pi32 = 3.14159265359f;
+
+global constexpr f32 Pi32  = 3.14159265359f;
 global constexpr f32 Tau32 = 6.28318530718f;
 
 function f32 Clamp01(f32 V)
@@ -432,6 +433,16 @@ function m3x4 MatrixAsRows3x4(v3 X = {1,0,0}, v3 Y = {0,1,0}, v3 Z = {0,0,1}, v3
     };
 }
 
+function m3x4 MatrixAsColumns3x4(v3 X, v3 Y, v3 Z)
+{
+    return
+    {
+        {{X.x, Y.x, Z.x, 0},
+         {X.y, Y.y, Z.y, 0},
+         {X.z, Y.z, Z.z, 0}},
+    };
+}
+
 
 function v3 GetXAxis(m3x4 const &M)
 {
@@ -510,13 +521,13 @@ CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
     m4x4_inv Result;
 
     Result.Forward = MatrixAsRows4x4(X, Y, Z);
-    v3 ForwardTranslation = -1.0f * (Result.Forward * Position);
+    v3 ForwardTranslation = -(Result.Forward * Position);
     Result.Forward.E[0][3] = ForwardTranslation.x;
     Result.Forward.E[1][3] = ForwardTranslation.y;
     Result.Forward.E[2][3] = ForwardTranslation.z;
 
     Result.Inverse = MatrixAsColumns4x4(X, Y, Z);
-    v3 InverseTranslation = -1.0f * (Result.Inverse * ForwardTranslation);
+    v3 InverseTranslation = -(Result.Inverse * ForwardTranslation);
     Result.Inverse.E[0][3] = InverseTranslation.x;
     Result.Inverse.E[1][3] = InverseTranslation.y;
     Result.Inverse.E[2][3] = InverseTranslation.z;
@@ -606,6 +617,12 @@ union quaternion
         f32 y;
         f32 z;
         f32 w;
+    };
+
+    struct
+    {
+        v3 xyz;
+        f32 IgnoredW;
     };
 
     v4 V4;
@@ -698,11 +715,11 @@ function quaternion LerpShortestPath(quaternion A, f32 t, quaternion B)
     return Normalize(Lerp(A, t, B));
 }
 
-
-
-
-
-
-
-
+function v3 Rotate(v3 V, quaternion Q)
+{
+    // https://fgiesen.wordpress.com/2019/02/09/rotating-a-single-vector-using-a-quaternion/
+    v3 t = 2.0f * Cross(Q.xyz, V);
+    V += Q.w*t + Cross(Q.xyz, t);
+    return V;
+}
 

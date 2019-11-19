@@ -42,11 +42,13 @@ if(!gl)
 }
 
 
-
 function GetWasmString(Length, Pointer)
 {
-    const Data = new Uint8Array(WasmMemory.buffer, Pointer, Length);
-    return ASCIIDecoder.decode(Data);
+    const Data = new Uint8Array(WasmMemory.buffer, Pointer, Length).slice();
+    const Str = ASCIIDecoder.decode(Data);
+    console.log(Pointer);
+    console.log("Str: " + Str);
+    return Str;
 }
 
 function PushGLObj(Obj)
@@ -224,6 +226,7 @@ async function Init()
 
     const WasmExports = Program.instance.exports;
     WasmMemory = WasmExports.memory;
+    console.log(WasmExports);
     WasmExports.Init();
 
     function ResizeHandler()

@@ -100,7 +100,7 @@ function void InitTextRendering(memory_arena *PermMem, memory_arena *TmpMem, ren
 
 
 
-    string Vert = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+    string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 uniform mat4 Transform;
 
 layout (location=0) in vec3 Position;
@@ -120,7 +120,7 @@ void main()
 )HereDoc"));
 
 
-    string Frag = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+    string FragmentSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 uniform sampler2D TextureSampler;
 
 in vec2 VertUV;
@@ -158,7 +158,7 @@ void main()
 }
 )HereDoc"));
 
-    TextRenderer->Common.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
+    TextRenderer->Common.Program = JS_GL_CreateCompileAndLinkProgram(VertexSource, FragmentSource);
     TextRenderer->Common.Transform = glGetUniformLocation(TextRenderer->Common.Program, S("Transform"));
     TextRenderer->TextureSampler = glGetUniformLocation(TextRenderer->Common.Program, S("TextureSampler"));
 
@@ -174,7 +174,7 @@ function void InitDefaultRendering(memory_arena *PermMem, memory_arena *TmpMem, 
     u32 MaxIndexCount = (MaxVertexCount*6) / 4;
     AllocateBuffers(PermMem, &DefaultRender->Common, MaxIndexCount, MaxVertexCount);
 
-    string Vert = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+    string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 layout (location=0) in vec3 Position;
 layout (location=1) in vec3 Normal;
 layout (location=2) in vec2 UV;
@@ -198,7 +198,7 @@ void main()
 {
     VertColor.a = Color.a;
 
-    float SkyLight = LightFrom(vec3(0, 100.0, 300.0), 50000.0);
+    float SkyLight = LightFrom(vec3(0, 100.0, 300.0), 30000.0);
     float MouseLight = LightFrom(MouseWorldP, 40.0);
 
     VertColor.rgb = Color.rgb*min(1.0, SkyLight + MouseLight);
@@ -208,7 +208,7 @@ void main()
 )HereDoc"));
 
 
-    string Frag = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+    string FragmentSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 in vec4 VertColor;
 out vec4 FragColor;
 
@@ -219,7 +219,7 @@ void main()
 }
 )HereDoc"));
 
-    DefaultRender->Common.Program = JS_GL_CreateCompileAndLinkProgram(Vert, Frag);
+    DefaultRender->Common.Program = JS_GL_CreateCompileAndLinkProgram(VertexSource, FragmentSource);
     DefaultRender->Common.Transform = glGetUniformLocation(DefaultRender->Common.Program, S("Transform"));
     DefaultRender->MouseWorldP = glGetUniformLocation(DefaultRender->Common.Program, S("MouseWorldP"));
 
@@ -302,13 +302,14 @@ function void PushQuad_(target_vertices_indices *Target,
 
 
 function void PushBox(renderer_default *Renderer,
+                      //v3 Pos, v3 Dim, quaternion Orient,
                       m3x4 const &Transform,
-                      u32 C0 = Color32_Red,
-                      u32 C1 = Color32_Green,
-                      u32 C2 = Color32_Blue,
+                      u32 C0 = Color32_White,
+                      u32 C1 = Color32_White,
+                      u32 C2 = Color32_White,
                       u32 C3 = Color32_White,
-                      u32 C4 = Color32_Black,
-                      u32 C5 = Color32_Red)
+                      u32 C4 = Color32_White,
+                      u32 C5 = Color32_White)
 {
 
 //		   .4------5     4------5     4------5     4------5     4------5.
@@ -322,6 +323,7 @@ function void PushBox(renderer_default *Renderer,
 
     target_vertices_indices Target = AllocateVerticesAndIndices(&Renderer->Common, 6*4, 6*6);
 
+#if 1
     v3 P0 = Transform * v3{-1, -1,  1};
     v3 P1 = Transform * v3{ 1, -1,  1};
     v3 P2 = Transform * v3{-1, -1, -1};
@@ -337,6 +339,25 @@ function void PushBox(renderer_default *Renderer,
     v3 N3 = Normalize(TransformAs3x3(Transform, v3{ 0, 0, 1})); // Top
     v3 N4 = Normalize(TransformAs3x3(Transform, v3{ 0, 0,-1})); // Bottom
     v3 N5 = Normalize(TransformAs3x3(Transform, v3{ 0, 1, 0})); // Back
+#else
+    v3 n = -0.5f*Dim;
+    v3 p =  0.5f*Dim;
+    v3 P0 = Rotate(v3{n.x, n.y, p.z}, Orient) + Pos;
+    v3 P1 = Rotate(v3{p.x, n.y, p.z}, Orient) + Pos;
+    v3 P2 = Rotate(v3{n.x, n.y, n.z}, Orient) + Pos;
+    v3 P3 = Rotate(v3{p.x, n.y, n.z}, Orient) + Pos;
+    v3 P4 = Rotate(v3{n.x, p.y, p.z}, Orient) + Pos;
+    v3 P5 = Rotate(v3{p.x, p.y, p.z}, Orient) + Pos;
+    v3 P6 = Rotate(v3{n.x, p.y, n.z}, Orient) + Pos;
+    v3 P7 = Rotate(v3{p.x, p.y, n.z}, Orient) + Pos;
+
+    v3 N0 = Rotate(v3{ 0,-1, 0}, Orient); // Front
+    v3 N1 = Rotate(v3{ 1, 0, 0}, Orient); // Right
+    v3 N2 = Rotate(v3{-1, 0, 0}, Orient); // Left
+    v3 N3 = Rotate(v3{ 0, 0, 1}, Orient); // Top
+    v3 N4 = Rotate(v3{ 0, 0,-1}, Orient); // Bottom
+    v3 N5 = Rotate(v3{ 0, 1, 0}, Orient); // Back
+#endif
 
     PushQuad_(&Target, P0, P1, P2, P3, C0, C0, C0, C0, N0); // Front
     PushQuad_(&Target, P1, P5, P3, P7, C1, C1, C1, C1, N1); // Right
@@ -350,17 +371,8 @@ function void
 PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityMatrix3x4)
 {
     v2 TextAdvance = {};
-
     font_atlas_char *Geometry = Renderer->Geometry;
-
     target_vertices_indices Target = AllocateVerticesAndIndices(&Renderer->Common, Text.Size*4, Text.Size*6);
-
-    //v3 XAxis = GetXAxis(Transform);
-    //v3 YAxis = GetYAxis(Transform);
-    //v3 ZAxis = GetZAxis(Transform);
-    //v3 Offset = GetTranslation(Transform);
-    //v3 z = XAxis*1000.0f;
-    //Printf("x %d y %d z %d", (s32)z.x, (s32)z.y, (s32)z.z);
 
     for(size i = 0; i < Text.Size; ++i)
     {
@@ -369,12 +381,12 @@ PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityM
         {
             TextAdvance.x = 0;
             TextAdvance.y -= FONT_GLYPH_SIZE / 256.0f;
-            Renderer->Common.IndexCount -= 6;
             Renderer->Common.VertexCount -= 4;
+            Renderer->Common.IndexCount -= 6;
             continue;
         }
 
-        font_atlas_char Geom = Geometry[(u8)Text.Contents[i]];
+        font_atlas_char Geom = Geometry[(u8)Char];
 
         v2 Min = Geom.Offset + TextAdvance;
         TextAdvance.x += Geom.Advance;
