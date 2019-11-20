@@ -17,12 +17,13 @@ function void AllocateBuffers(memory_arena *Memory, renderer_common *Renderer, u
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertex)*Renderer->MaxVertexCount*sizeof(vertex), 0, GL_STREAM_DRAW);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, N));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
     glEnableVertexAttribArray(3);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, P));
+    glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, N));
+    glVertexAttribPointer(2, 2, GL_FLOAT, false, sizeof(vertex), (void *)OffsetOf(vertex, UV));
     glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, true, sizeof(vertex), (void *)OffsetOf(vertex, C));
 
 
@@ -96,7 +97,7 @@ function void InitTextRendering(memory_arena *PermMem, memory_arena *TmpMem, ren
     glBindTexture(GL_TEXTURE_2D, TextRenderer->Texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AtlasWidth, AtlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize/4, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D);
 
 
@@ -417,4 +418,208 @@ PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityM
         Target.FirstIndex += 4;
 
     }
+}
+
+function void
+InitBoxRendering(memory_arena *PermMem, memory_arena *TmpMem, renderer_boxes *Renderer, u32 MaxInstanceCount = (1 << 16))
+{
+    Renderer->MaxInstanceCount = MaxInstanceCount;
+    Renderer->InstanceData = PushArray(PermMem, box_instance, Renderer->MaxInstanceCount, ArenaFlag_NoClear);
+
+    v3 P0 = {-1, -1,  1};
+    v3 P1 = { 1, -1,  1};
+    v3 P2 = {-1, -1, -1};
+    v3 P3 = { 1, -1, -1};
+    v3 P4 = {-1,  1,  1};
+    v3 P5 = { 1,  1,  1};
+    v3 P6 = {-1,  1, -1};
+    v3 P7 = { 1,  1, -1};
+
+    v3 N0 = { 0,-1, 0};
+    v3 N1 = { 1, 0, 0};
+    v3 N2 = {-1, 0, 0};
+    v3 N3 = { 0, 0, 1};
+    v3 N4 = { 0, 0,-1};
+    v3 N5 = { 0, 1, 0};
+
+    box_vertex Vertices[24];
+    Vertices[0]  = {P0, N0};
+    Vertices[1]  = {P1, N0};
+    Vertices[2]  = {P2, N0};
+    Vertices[3]  = {P3, N0};
+
+    Vertices[4]  = {P1, N1};
+    Vertices[5]  = {P5, N1};
+    Vertices[6]  = {P3, N1};
+    Vertices[7]  = {P7, N1};
+
+    Vertices[8]  = {P4, N2};
+    Vertices[9]  = {P0, N2};
+    Vertices[10] = {P6, N2};
+    Vertices[11] = {P2, N2};
+
+    Vertices[12] = {P4, N3};
+    Vertices[13] = {P5, N3};
+    Vertices[14] = {P0, N3};
+    Vertices[15] = {P1, N3};
+
+    Vertices[16] = {P2, N4};
+    Vertices[17] = {P3, N4};
+    Vertices[18] = {P6, N4};
+    Vertices[19] = {P7, N4};
+
+    Vertices[20] = {P5, N5};
+    Vertices[21] = {P4, N5};
+    Vertices[22] = {P7, N5};
+    Vertices[23] = {P6, N5};
+
+    u16 Indices[36];
+    u16 *Index = Indices;
+    for(u16 Face = 0; Face < 6; ++Face)
+    {
+        Index[0] = 4*Face + 2;
+        Index[1] = 4*Face + 1;
+        Index[2] = 4*Face + 0;
+        Index[3] = 4*Face + 1;
+        Index[4] = 4*Face + 2;
+        Index[5] = 4*Face + 3;
+        //Printf("%u %u %u %u %u %u", Index[0], Index[1], Index[2], Index[3], Index[4], Index[5]);
+
+        Index += 6;
+    }
+
+    Renderer->VertexArray = glCreateVertexArray();
+    glBindVertexArray(Renderer->VertexArray);
+
+    Renderer->CubeShapeIndexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->CubeShapeIndexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Indices), Indices, GL_STATIC_DRAW);
+
+    Renderer->CubeShapeVertexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ARRAY_BUFFER, Renderer->CubeShapeVertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(box_vertex), (void *)OffsetOf(box_vertex, P));
+    glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(box_vertex), (void *)OffsetOf(box_vertex, N));
+
+    Renderer->InstanceVertexBuffer = glCreateBuffer();
+    glBindBuffer(GL_ARRAY_BUFFER, Renderer->InstanceVertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(box_instance)*Renderer->MaxInstanceCount, 0, GL_STREAM_DRAW);
+
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
+    glEnableVertexAttribArray(5);
+
+    glVertexAttribPointer(2, 3, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, P));
+    glVertexAttribPointer(3, 3, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, Dim));
+    glVertexAttribPointer(4, 4, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, Orient));
+    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, true, sizeof(box_instance), (void *)OffsetOf(box_instance, Color));
+
+    glVertexAttribDivisor(2, 1);
+    glVertexAttribDivisor(3, 1);
+    glVertexAttribDivisor(4, 1);
+    glVertexAttribDivisor(5, 1);
+
+    
+    string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+layout (location=0) in vec3 VertexPosition;
+layout (location=1) in vec3 VertexNormal;
+
+layout (location=2) in vec3 InstancePosition;
+layout (location=3) in vec3 InstanceDim;
+layout (location=4) in vec4 InstanceOrient;
+layout (location=5) in vec4 InstanceColor;
+
+uniform mat4 Transform;
+uniform vec3 MouseWorldP;
+
+out vec4 VertColor;
+
+vec3 Position;
+vec3 Normal;
+
+vec3 RotateByQuaternion(vec3 V, vec4 Q)
+{
+    // https://fgiesen.wordpress.com/2019/02/09/rotating-a-single-vector-using-a-quaternion/
+    vec3 t = 2.0f * cross(Q.xyz, V);
+    V += Q.w*t + cross(Q.xyz, t);
+    return V;
+}
+
+float LightFrom(vec3 LightPosition, float Brightness)
+{
+    vec3 ToLight = LightPosition - Position;
+    float LightStrength = Brightness / dot(ToLight, ToLight);
+    float Factor = max(0.0, dot(Normal, normalize(ToLight)));
+    float Result = LightStrength * Factor*Factor;
+    return Result;
+}
+
+void main()
+{
+    Position = RotateByQuaternion(VertexPosition*InstanceDim*0.5, InstanceOrient) + InstancePosition;
+    Normal = RotateByQuaternion(VertexNormal, InstanceOrient);
+    vec4 Color = InstanceColor;
+
+    VertColor.a = Color.a;
+
+    float SkyLight = LightFrom(vec3(0, 100.0, 300.0), 30000.0);
+    float MouseLight = LightFrom(MouseWorldP, 40.0);
+
+    VertColor.rgb = Color.rgb*min(1.0, SkyLight + MouseLight);
+
+    gl_Position = Transform*vec4(Position, 1.0);
+}
+)HereDoc"));
+
+
+    string FragmentSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+in vec4 VertColor;
+out vec4 FragColor;
+
+void main()
+{
+    FragColor = VertColor;
+    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
+    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+}
+)HereDoc"));
+
+    Renderer->Program = JS_GL_CreateCompileAndLinkProgram(VertexSource, FragmentSource);
+    Renderer->Transform = glGetUniformLocation(Renderer->Program, S("Transform"));
+    Renderer->MouseWorldP = glGetUniformLocation(Renderer->Program, S("MouseWorldP"));
+}
+
+
+function void Flush(renderer_boxes *Renderer)
+{
+    glBindVertexArray(Renderer->VertexArray);
+
+    glBindBuffer(GL_ARRAY_BUFFER, Renderer->InstanceVertexBuffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, Renderer->InstanceCount*sizeof(box_instance), Renderer->InstanceData);
+
+    glUseProgram(Renderer->Program);
+
+    //glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 1);
+    glDrawElementsInstanced(GL_TRIANGLES, 24, GL_UNSIGNED_SHORT, 0, Renderer->InstanceCount);
+
+    Renderer->InstanceCount = 0;
+}
+
+function void PushBox(renderer_boxes *Renderer, v3 Pos, v3 Dim, quaternion Orient = {0,0,0,1}, u32 Color = Color32_White)
+{
+    if(State.Boxes.InstanceCount >= Renderer->MaxInstanceCount)
+    {
+        Flush(Renderer);
+    }
+
+    box_instance *Box = Renderer->InstanceData + Renderer->InstanceCount++;
+    Box->P = Pos;
+    Box->Dim = Dim;
+    Box->Orient = Orient;
+    Box->Color = Color;
 }

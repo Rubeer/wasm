@@ -7,6 +7,7 @@
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#define GL_STATIC_DRAW                    0x88E4
 #define GL_STREAM_DRAW                    0x88E0
 #define GL_DYNAMIC_DRAW                   0x88E8
 #define GL_DEPTH_BUFFER_BIT               0x00000100
@@ -95,13 +96,16 @@ import_from_js GLuint glCreateVertexArray();
 import_from_js void glBindVertexArray(GLuint array);
 import_from_js void glEnableVertexAttribArray (GLuint index);
 import_from_js void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+import_from_js void glVertexAttribDivisor (GLuint index, GLuint divisor);
 import_from_js GLuint glGetUniformLocation (GLuint Program, u32 NameLength, char *NamePtr);
 import_from_js void glUniformMatrix4fv(GLuint Location, GLboolean Transpose, m4x4 const *Data);
 import_from_js void glUniform1i (GLuint location, GLint v0);
 import_from_js void glUniform3f (GLuint location, f32 x, f32 y, f32 z);
 
 import_from_js void glDrawArrays(GLenum mode, GLint first, GLsizei count);
+import_from_js void glDrawArraysInstanced (GLenum mode, GLint first, GLsizei count, GLsizei instancecount);
 import_from_js void glDrawElements(GLenum mode, GLsizei count, GLenum type, GLintptr offset);
+import_from_js void glDrawElementsInstanced (GLenum mode, GLsizei count, GLenum type, GLuint offset, GLsizei instancecount);
 
 import_from_js void glTexImage2D (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, void *DataPtr, size DataSize, size Offset);
 import_from_js GLuint glCreateTexture();

@@ -53,8 +53,9 @@ struct renderer_common
     GLuint Program;
     GLuint Transform;
 
-    GLuint VertexBuffer;
     GLuint VertexArray;
+
+    GLuint VertexBuffer;
     GLuint IndexBuffer;
 
     u32 VertexCount;
@@ -64,6 +65,38 @@ struct renderer_common
 
     vertex *Vertices;
     u16 *Indices;
+};
+
+
+struct box_vertex
+{
+    v3 P;
+    v3 N;
+};
+
+struct box_instance
+{
+    v3 P;
+    v3 Dim;
+    quaternion Orient;
+    u32 Color;
+};
+
+struct renderer_boxes
+{
+    GLuint Program;
+    GLuint Transform;
+    GLuint MouseWorldP;
+
+    GLuint VertexArray;
+
+    GLuint CubeShapeVertexBuffer;
+    GLuint CubeShapeIndexBuffer;
+
+    u32 MaxInstanceCount;
+    u32 InstanceCount;
+    GLuint InstanceVertexBuffer;
+    box_instance *InstanceData;
 };
 
 

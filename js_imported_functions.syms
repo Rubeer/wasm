@@ -36,6 +36,7 @@ glCreateVertexArray
 glBindVertexArray
 glEnableVertexAttribArray
 glVertexAttribPointer
+glVertexAttribDivisor
 
 glTexImage2D
 glCreateTexture
@@ -46,4 +47,6 @@ glBindTexture
 glGenerateMipmap
 
 glDrawArrays
+glDrawArraysInstanced
 glDrawElements
+glDrawElementsInstanced

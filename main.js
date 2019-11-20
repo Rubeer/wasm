@@ -46,8 +46,8 @@ function GetWasmString(Length, Pointer)
 {
     const Data = new Uint8Array(WasmMemory.buffer, Pointer, Length).slice();
     const Str = ASCIIDecoder.decode(Data);
-    console.log(Pointer);
-    console.log("Str: " + Str);
+    //console.log(Pointer);
+    //console.log("Str: " + Str);
     return Str;
 }
 
@@ -91,9 +91,12 @@ Imports.glCreateVertexArray = function(Program) {return PushGLObj(gl.createVerte
 Imports.glCreateBuffer = function(Program) {return PushGLObj(gl.createBuffer()) };
 Imports.glBindBuffer = function(Type, Buffer) { gl.bindBuffer(Type, GLObjects[Buffer]); }
 Imports.glBindVertexArray = function(Arr) { gl.bindVertexArray(GLObjects[Arr]); }
-Imports.glEnableVertexAttribArray = function(Index) { gl.enableVertexAttribArray(Index) };
+Imports.glEnableVertexAttribArray = function(Index) { gl.enableVertexAttribArray(Index); };
+Imports.glVertexAttribDivisor = function(Index, Divisor) { gl.vertexAttribDivisor(Index, Divisor); };
 Imports.glDrawArrays = function(Mode, First, Count) { gl.drawArrays(Mode, First, Count); }
+Imports.glDrawArraysInstanced = function(Mode, First, Count, InstanceCount) { gl.drawArraysInstanced(Mode, First, Count, InstanceCount); }
 Imports.glDrawElements = function(Mode, Count, Type, Offset) { gl.drawElements(Mode, Count, Type, Offset); }
+Imports.glDrawElementsInstanced = function(Mode, Count, Type, Offset, InstanceCount) { gl.drawElementsInstanced(Mode, Count, Type, Offset, InstanceCount); }
 Imports.glEnable = function(Mode) { gl.enable(Mode); }
 Imports.glDisable = function(Mode) { gl.disable(Mode); }
 Imports.glCreateTexture = function() { return PushGLObj(gl.createTexture()); }
@@ -145,7 +148,7 @@ Imports.glBufferData = function(Target, Size, DataPtr, UsageHint)
 {
     if(DataPtr != 0)
     {
-        const Data = new Uint8Array(WasmMemory, DataPtr, Size);
+        const Data = new Uint8Array(WasmMemory.buffer, DataPtr, Size);
         gl.bufferData(Target, Data, UsageHint); // Allocate&upload to GPU
     }
     else

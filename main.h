@@ -32,6 +32,7 @@ struct state
     user_input Input;
     renderer_default Default;
     renderer_text Text;
+    renderer_boxes Boxes;
 
     // NOTE(robin): Grows dynamically, should not be cleared
     memory_arena PermanentMemory;
