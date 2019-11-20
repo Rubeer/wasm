@@ -279,21 +279,24 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         PushBox(&State.Default, BoxTransform, C,C,C,C,C,C);
         //PushBox(&State.Default, P, Dim, Box->Orient, C,C,C,C,C,C);
 
-        if(LengthSquared(CameraP - P) < Square(30.0f))
+
+        f32 CameraDistance = Length(CameraP - P);
+        if(CameraDistance < 15.0f)
         {
+            f32 TextAlpha = 1.0f - SmoothStep(5.0f, CameraDistance, 15.0f);
+
             m3x4 MakeUpright = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
             // TODO(robin) Symbolically solve
             m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * MakeUpright;
             char Buf[128];
-            string Text = FormatText(Buf, 
-                                          "Box #%u\n"
-                                          "Position:\n"
+            string Text = FormatText(Buf, "Box #%u\n"
                                           "x %f\n"
                                           "y %f\n"
                                           "z %f\n",
                                           i, P.x, P.y, P.z);
 
-            PushText(&State.Text, Text, TextTransform);
+            u32 Color = Pack01RGBA255(1,1,1, TextAlpha);
+            PushText(&State.Text, Text, TextTransform, Color);
         }
     }
 

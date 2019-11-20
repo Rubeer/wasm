@@ -95,8 +95,9 @@ function void InitTextRendering(memory_arena *PermMem, memory_arena *TmpMem, ren
     TextRenderer->Texture = glCreateTexture();
     glBindTexture(GL_TEXTURE_2D, TextRenderer->Texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AtlasWidth, AtlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, Pixels, PixelsSize/4, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
 
 
@@ -140,21 +141,21 @@ void main()
 {
     float Distance = texture(TextureSampler, VertUV).r;
 
-    vec2 Derivative = vec2(dFdx(Distance), dFdy(Distance));
-    const float EdgeSmoothAmount = 2.0f; // In pixels
-    float Norm = EdgeSmoothAmount * length(Derivative);
+    //vec2 Derivative = vec2(dFdx(Distance), dFdy(Distance));
+    const float EdgeSmoothAmount = 1.5f;
+    float Norm = EdgeSmoothAmount * fwidth(Distance);//length(Derivative);
 
     const vec3 OutlineColor = vec3(0.0);
     const float OutlineBegin = 0.5;
-    const float OutlineEnd  = OutlineBegin - 0.25;
+    float OutlineEnd  = OutlineBegin - 0.25;
 
     vec3 Color = mix(OutlineColor, VertColor.rgb, SmoothEdge(OutlineBegin, Norm, Distance));
 
     FragColor = vec4(Color, VertColor.a*SmoothEdge(OutlineEnd, Norm, Distance));
     if(FragColor.a < 0.00001f) discard;
 
-    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
     FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
+    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
 }
 )HereDoc"));
 
@@ -215,6 +216,7 @@ out vec4 FragColor;
 void main()
 {
     FragColor = VertColor;
+    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
 }
 )HereDoc"));
@@ -368,7 +370,7 @@ function void PushBox(renderer_default *Renderer,
 }
 
 function void
-PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityMatrix3x4)
+PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityMatrix3x4, u32 Color = Color32_White)
 {
     v2 TextAdvance = {};
     font_atlas_char *Geometry = Renderer->Geometry;
@@ -405,10 +407,10 @@ PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityM
         Target.V[2].UV = {UVMin.x, UVMax.y};
         Target.V[3].UV = UVMax;
 
-        Target.V[0].C = Color32_White;
-        Target.V[1].C = Color32_White;
-        Target.V[2].C = Color32_White;
-        Target.V[3].C = Color32_White;
+        Target.V[0].C = Color;
+        Target.V[1].C = Color;
+        Target.V[2].C = Color;
+        Target.V[3].C = Color;
 
         PushQuadIndices(&Target, 0, 1, 2, 3);
         Target.V += 4;

@@ -19,6 +19,12 @@ function f32 SmoothCurve01(f32 x)
     f32 y = (3.0f - 2.0f*x)*x*x; // NOTE(robin): http://thetamath.com/app/y=(3-2x)*x*x
     return y;
 }
+
+function f32 SmoothStep(f32 A, f32 t, f32 B)
+{
+    return SmoothCurve01((t - A) / (B - A));
+}
+
 union v2
 {
     struct
@@ -441,6 +447,7 @@ function m3x4 MatrixAsColumns3x4(v3 X, v3 Y, v3 Z)
          {X.y, Y.y, Z.y, 0},
          {X.z, Y.z, Z.z, 0}},
     };
+
 }
 
 
