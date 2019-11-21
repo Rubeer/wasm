@@ -29,6 +29,9 @@ struct state
     box_animation *BoxAnimations;
     u32 SelectedBoxIndex;
 
+    orbit_camera Camera;
+    v2 LastMousePos;
+
     user_input Input;
     renderer_default Default;
     renderer_text Text;

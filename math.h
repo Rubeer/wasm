@@ -468,6 +468,17 @@ function v3 GetTranslation(m3x4 const &M)
     return {M.E[0][3], M.E[1][3], M.E[2][3]};
 }
 
+function v3 GetColumn(m4x4 const &A, u32 c)
+{
+    v3 Result = {A.E[0][c], A.E[1][c], A.E[2][c]};
+    return Result;
+}
+function v3 GetColumn(m3x4 const &A, u32 c)
+{
+    v3 Result = {A.E[0][c], A.E[1][c], A.E[2][c]};
+    return Result;
+}
+
 function m4x4_inv
 PerspectiveProjectionTransform(u32 Width, u32 Height, f32 NearClip, f32 FarClip, f32 FocalLength)
 {
@@ -523,7 +534,7 @@ function m4x4 HUDProjection(u32 Width, u32 Height)
 
 
 function m4x4_inv
-CameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
+MakeCameraTransform(v3 X, v3 Y, v3 Z, v3 Position)
 {
     m4x4_inv Result;
 
@@ -614,6 +625,30 @@ function m3x4 XYZRotationN(v3 V)
 function m3x4 ZYXRotationN(v3 V)
 {
     return ZRotationN(V.x) * YRotationN(V.y) * XRotationN(V.z);
+}
+
+struct orbit_camera
+{
+    f32 Orbit;
+    f32 Tilt;
+    f32 Dolly;
+
+    v3 P;
+    v3 X;
+    v3 Y;
+    v3 Z;
+};
+
+function m4x4_inv
+MakeCameraOrbitTransform(orbit_camera *Camera)
+{
+    m3x4 CameraRotation = ZRotationN(Camera->Orbit) * XRotationN(Camera->Tilt);
+    Camera->P = CameraRotation * v3{0, 0, Camera->Dolly};
+    Camera->X = GetColumn(CameraRotation, 0);
+    Camera->Y = GetColumn(CameraRotation, 1);
+    Camera->Z = GetColumn(CameraRotation, 2);
+    m4x4_inv Transform = MakeCameraTransform(Camera->X, Camera->Y, Camera->Z, Camera->P);
+    return Transform;
 }
 
 union quaternion

@@ -34,6 +34,14 @@ export_to_js void MouseLeft(bool EndedDown)
     AddButtonTransition(&State.Input.MouseLeft, EndedDown);
 }
 
+export_to_js void MouseLeave()
+{
+    if(State.Input.MouseLeft.EndedDown)
+    {
+        MouseLeft(false);
+    }
+}
+
 export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
 {
     if(KeyCode < ArrayCount(State.Input.Keys))
@@ -42,6 +50,10 @@ export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
     }
 }
 
+export_to_js void MouseWheel(f32 DeltaY)
+{
+    State.Camera.Dolly += 0.001f*State.Camera.Dolly*DeltaY;
+}
 
 
 struct hit_test
@@ -104,10 +116,16 @@ export_to_js void Init()
         State.BoxAnimations[i].Orient.w = 1;
     }
     State.SelectedBoxIndex = U32Max;
+    
+    State.Camera.Tilt = 0.25f;
+    f32 Radius = (f32)State.BoxCount * 0.02f;
+    State.Camera.Dolly = Radius + 18;
 }
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
+    orbit_camera *Camera = &State.Camera;
+
     glViewport(0, 0, Width, Height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -115,6 +133,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     v2 RenderDim = v2{(f32)Width, (f32)Height};
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
     MouseClipSpace.y = -MouseClipSpace.y;
+
+    v2 MousePos = MouseClipSpace * (f32)Height/(f32)Width;
+    v2 MouseDiff = MousePos - State.LastMousePos;
+    State.LastMousePos = MousePos;
+
 
     //State.BoxCount = (State.BoxCount + 1) % State.MaxBoxCount;
     //State.BoxCount = 32;
@@ -133,29 +156,38 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         Anim[i] += DeltaTime*Speeds[i];
     }
 
-    v3 OrbitCenter = {0, Radius + 18, -7};
-    v3 CameraP = {0, 0, 0};
+    v3 OrbitCenter = {0, 0, 0};
     constexpr v3 Up = {0, 0, 1};
 
-    v3 CameraZ = Normalize(CameraP - OrbitCenter);
-    //v3 CameraZ = Normalize(v3{0.2f,-1,0.2f});
-    v3 CameraX = Normalize(Cross(Up, CameraZ));
-    v3 CameraY = Cross(CameraZ, CameraX);
-    m4x4_inv Camera = CameraTransform(CameraX, CameraY, CameraZ, CameraP);
+    button *MouseLeft = &State.Input.MouseLeft;
+    if(MouseLeft->EndedDown)
+    {
+        Camera->Orbit -= 0.1f*MouseDiff.x;
+        Camera->Tilt += 0.1f*MouseDiff.y;
+    }
+
+
+    m4x4_inv CameraTransform = MakeCameraOrbitTransform(Camera);
+    //v3 CameraP = {0, -Radius - 18, 7};
+    //v3 CameraZ = Normalize(CameraP - OrbitCenter);
+    ////v3 CameraZ = Normalize(v3{0.2f,-1,0.2f});
+    //v3 CameraX = Normalize(Cross(Up, CameraZ));
+    //v3 CameraY = Cross(CameraZ, CameraX);
 
     f32 NearClip = 0.1f;
-    f32 FarClip = 1000.0f;
+    f32 FarClip = Radius*2.5f + Camera->Dolly;
     f32 FocalLength = 1.0f;
     m4x4_inv Projection = PerspectiveProjectionTransform(Width, Height, NearClip, FarClip, FocalLength);
 
+
     m4x4_inv RenderTransform;
-    RenderTransform.Forward = Projection.Forward * Camera.Forward;
-    RenderTransform.Inverse = Camera.Inverse * Projection.Inverse;
+    RenderTransform.Forward = Projection.Forward * CameraTransform.Forward;
+    RenderTransform.Inverse = CameraTransform.Inverse * Projection.Inverse;
 
     v3 MouseWorldP = {};
     {
         v4 FromCamera = {0,0,0,1};
-        FromCamera.xyz = CameraP - 10.0f*CameraZ;
+        FromCamera.xyz = Camera->P - 10.0f*Camera->P;
         v4 FromCameraClip = RenderTransform.Forward * FromCamera;
 
         v4 ClipPos;
@@ -168,9 +200,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
 
     hit_test HitTest = {};
-    HitTest.RayOrigin = CameraP;
+    HitTest.RayOrigin = Camera->P;
     HitTest.RayOriginOffset = MouseWorldP;
-    HitTest.RayDir = Normalize(MouseWorldP - CameraP);
+    HitTest.RayDir = Normalize(MouseWorldP - Camera->P);
     HitTest.LastHitDistance = F32Max;
 
     u32 ClosestIndex = U32Max;
@@ -239,7 +271,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
             f32 HalfLen = 0.5f*Len;
 
             //m3x4 LineTransform = Translation(P) * MatrixAsColumns3x4(X, Y, Z) * Translation(0,0,HalfLen) * Scaling(0.05f,0.05f,HalfLen);
-            v3 LineP = P + Dir*HalfLen;//Rotate(P0toP1*0.5f, Q);
+            v3 LineP = P + P0toP1*0.5f;
             v3 LineDim = {0.1f, 0.1f, Len};
             PushBox(&State.Boxes, LineP, LineDim, Q);
             PrevP = P;
@@ -299,7 +331,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         PushBox(&State.Boxes, P, Dim, Box->Orient, C);
 
 
-        f32 CameraDistance = Length(CameraP - P);
+        f32 CameraDistance = Length(Camera->P - P);
 #if 1
         if(CameraDistance < 15.0f)
         {
@@ -323,10 +355,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     }
 
 
-    button *Left = &State.Input.MouseLeft;
-    if(Left->HalfTransitionCount && Left->EndedDown)
+    if(MouseLeft->HalfTransitionCount && MouseLeft->EndedDown)
     {
-        Left->HalfTransitionCount = 0;
+        MouseLeft->HalfTransitionCount = 0;
         State.SelectedBoxIndex = ClosestIndex;
     }
 
@@ -338,9 +369,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
 
 
+    Flush(&State.Boxes);
     Flush(&State.Default.Common);
     Flush(&State.Text.Common);
-    Flush(&State.Boxes);
 
 
     Flush(&State.Boxes);

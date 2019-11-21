@@ -253,12 +253,36 @@ async function Init()
 
     gl.canvas.addEventListener("mousedown", Event =>
     {
-        WasmExports.MouseLeft(true);
+        if(Event.button == 0)
+        {
+            WasmExports.MouseLeft(true);
+        }
+        else if(Event.button == 1)
+        {
+            // TODO Middle mouse
+        }
     });
 
     gl.canvas.addEventListener("mouseup", Event =>
     {
-        WasmExports.MouseLeft(false);
+        if(Event.button == 0)
+        {
+            WasmExports.MouseLeft(false);
+        }
+        else if(Event.button == 1)
+        {
+            // TODO Middle mouse
+        }
+    });
+
+    gl.canvas.addEventListener("mouseleave", Event =>
+    {
+        WasmExports.MouseLeave();
+    });
+
+    gl.canvas.addEventListener("wheel", Event =>
+    {
+        WasmExports.MouseWheel(Event.deltaY);
     });
 
     window.addEventListener("keydown", Event =>
@@ -270,6 +294,7 @@ async function Init()
     {
         WasmExports.KeyPress(Event.keyCode, false);
     });
+
 
     let PrevTime = null;
     function RenderLoop(Now)

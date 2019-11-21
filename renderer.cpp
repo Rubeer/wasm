@@ -155,8 +155,8 @@ void main()
     FragColor = vec4(Color, VertColor.a*SmoothEdge(OutlineEnd, Norm, Distance));
     if(FragColor.a < 0.00001f) discard;
 
-    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
 }
 )HereDoc"));
 
@@ -217,8 +217,8 @@ out vec4 FragColor;
 void main()
 {
     FragColor = VertColor;
-    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
     FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
 }
 )HereDoc"));
 
@@ -605,7 +605,7 @@ function void Flush(renderer_boxes *Renderer)
     glUseProgram(Renderer->Program);
 
     //glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 1);
-    glDrawElementsInstanced(GL_TRIANGLES, 24, GL_UNSIGNED_SHORT, 0, Renderer->InstanceCount);
+    glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, 0, Renderer->InstanceCount);
 
     Renderer->InstanceCount = 0;
 }
@@ -623,3 +623,5 @@ function void PushBox(renderer_boxes *Renderer, v3 Pos, v3 Dim, quaternion Orien
     Box->Orient = Orient;
     Box->Color = Color;
 }
+
+
