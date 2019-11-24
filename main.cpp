@@ -100,6 +100,7 @@ export_to_js void Init()
     //InitDefaultRendering(PermanentMemory, FrameMemory, &State.Default);
     InitTextRendering(PermanentMemory, FrameMemory, &State.Text);
     InitBoxRendering(PermanentMemory, FrameMemory, &State.Boxes);
+    InitPostProcessing(PermanentMemory, FrameMemory, &State.PostProcessing);
 
     glEnable(GL_DEPTH_TEST);
 
@@ -127,7 +128,7 @@ export_to_js void Init()
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
     State.MaxBoxCount = 4096;
     State.BoxCount = State.MaxBoxCount;
@@ -422,12 +423,22 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     Reset(&State.FrameMemory);
 
-    // TODO(robin) Postprocessing instead of blit
+#if 0
     glBindFramebuffer(GL_READ_FRAMEBUFFER, State.Framebuffer);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBlitFramebuffer(0, 0, (GLint)Width, (GLint)Height,
                       0, 0, (GLint)Width, (GLint)Height,
                       GL_COLOR_BUFFER_BIT, GL_NEAREST);
+#else
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glUseProgram(State.PostProcessing.Program);
+    glActiveTexture(GL_TEXTURE0+1);
+    glBindTexture(GL_TEXTURE_2D, State.FramebufferColorTexture);
+    glUniform1i(State.PostProcessing.FramebufferSampler, 1);
+    glBindVertexArray(State.PostProcessing.VertexArray);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glActiveTexture(GL_TEXTURE0);
+#endif
 }
 
 

@@ -37,7 +37,7 @@ struct state
     //renderer_default Default;
     renderer_text Text;
     renderer_boxes Boxes;
-    GLuint FullscreenRectangle;
+    renderer_postprocessing PostProcessing;
     GLuint FramebufferColorTexture;
     GLuint FramebufferDepthTexture;
     GLuint Framebuffer;

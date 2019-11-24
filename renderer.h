@@ -114,3 +114,11 @@ struct renderer_default
     renderer_common Common;
     GLuint MouseWorldP;
 };
+
+struct renderer_postprocessing
+{
+    GLuint Program;
+    GLuint FramebufferSampler;
+    GLuint VertexArray;
+    GLuint RectangleBuffer;
+};

@@ -155,8 +155,8 @@ void main()
     FragColor = vec4(Color, VertColor.a*SmoothEdge(OutlineEnd, Norm, Distance));
     if(FragColor.a < 0.00001f) discard;
 
-    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
-    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
+    //FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+    //FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
 }
 )HereDoc"));
 
@@ -217,8 +217,8 @@ out vec4 FragColor;
 void main()
 {
     FragColor = VertColor;
-    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
-    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
+    //FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+    //FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
 }
 )HereDoc"));
 
@@ -585,8 +585,8 @@ out vec4 FragColor;
 void main()
 {
     FragColor = VertColor;
-    FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
-    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+    //FragColor.rgb *= FragColor.a; // TODO(robin): Can we fix the blend mode so we don't need to do this?
+    //FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
 }
 )HereDoc"));
 
@@ -626,3 +626,57 @@ function void PushBox(renderer_boxes *Renderer, v3 Pos, v3 Dim, quaternion Orien
 }
 
 
+function void
+InitPostProcessing(memory_arena *PermMem, memory_arena *TmpMem, renderer_postprocessing *Renderer)
+{
+    v2 Rectangle[] = 
+    {
+        {-1, -1},
+        { 1, -1},
+        {-1,  1},
+
+        { 1, -1},
+        { 1,  1},
+        {-1,  1},
+    };
+
+    Renderer->VertexArray = glCreateVertexArray();
+    glBindVertexArray(Renderer->VertexArray);
+
+    Renderer->RectangleBuffer = glCreateBuffer();
+    glBindBuffer(GL_ARRAY_BUFFER, Renderer->RectangleBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Rectangle), Rectangle, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(v2), 0);
+    
+    string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+layout (location=0) in vec2 Position;
+
+out vec4 VertColor;
+out vec2 UV;
+
+void main()
+{
+    UV = 0.5*Position + vec2(0.5);
+    gl_Position = vec4(Position, 0.0, 1.0);
+}
+)HereDoc"));
+
+
+    string FragmentSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+in vec2 UV;
+out vec4 FragColor;
+
+uniform sampler2D FramebufferSampler;
+
+void main()
+{
+    FragColor = texture(FramebufferSampler, UV);
+    FragColor.rgb = LinearToSRGB_Approx(FragColor.rgb);
+}
+)HereDoc"));
+
+    Renderer->Program = JS_GL_CreateCompileAndLinkProgram(VertexSource, FragmentSource);
+    Renderer->FramebufferSampler = glGetUniformLocation(Renderer->Program, S("FramebufferSampler"));
+}
