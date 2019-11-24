@@ -52,7 +52,7 @@ export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
 
 export_to_js void MouseWheel(f32 DeltaY)
 {
-    State.Camera.Dolly += 0.02f*State.Camera.Dolly*Sign(DeltaY);
+    State.Camera.Dolly += 0.002f*State.Camera.Dolly*DeltaY;
 }
 
 
@@ -130,7 +130,7 @@ export_to_js void Init()
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
-    State.MaxBoxCount = 4096;
+    State.MaxBoxCount = 40960;
     State.BoxCount = State.MaxBoxCount;
     State.BoxAnimations = PushArray(PermanentMemory, box_animation, State.MaxBoxCount);
     for(u32 i = 0; i < State.MaxBoxCount; ++i)
@@ -140,7 +140,7 @@ export_to_js void Init()
     State.SelectedBoxIndex = U32Max;
     
     State.Camera.Tilt = 0.25f;
-    f32 Radius = (f32)State.BoxCount * 0.02f;
+    f32 Radius = 150.0f;//(f32)State.BoxCount * 0.02f;
     State.Camera.Dolly = Radius + 18;
 
 }
@@ -179,14 +179,14 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
     MouseClipSpace.y = -MouseClipSpace.y;
 
-    v2 MousePos = MousePixels/(f32)Width;
+    v2 MousePos = MousePixels/(f32)Height;
     v2 MouseDiff = MousePos - State.LastMousePos;
     State.LastMousePos = MousePos;
 
 
     //State.BoxCount = (State.BoxCount + 1) % State.MaxBoxCount;
     //State.BoxCount = 32;
-    f32 Radius = (f32)State.BoxCount * 0.02f;
+    f32 Radius = 150.0f;//(f32)State.BoxCount * 0.02f;
 
     local_persist f32 Anim[5] = {0, 0.15f, 0.415f, 0.865f, 0};
     f32 Speeds[ArrayCount(Anim)] = {0.000015f*Radius, 0.1f, 0.1f, 0.1f, 0.01f};
@@ -290,9 +290,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         f32 V = (f32)i / (f32)State.BoxCount;
 
         v3 P = OrbitCenter;
-        P.x += (4.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*CosineApproxN(V+Anim[0]);
-        P.y += (4.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*SineApproxN(V+Anim[0]);
-        P.z += CosineApproxN(V + RandomBilateral(&Random)) * 5.0f;
+        P.x += (25.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*CosineApproxN(V+Anim[0]);
+        P.y += (25.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*SineApproxN(V+Anim[0]);
+        P.z += CosineApproxN(V + RandomBilateral(&Random)) * 50.0f;
 
         v3 Dim = v3{0.9f, 0.9f, 0.9f};
         v3 HalfDim = Dim*0.5f;
