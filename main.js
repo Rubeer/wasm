@@ -7,6 +7,7 @@ const Imports = {};
 //let WasmMemory = null;//new Uint8Array(Imports.memory.buffer);
 let WasmMemory = null;
 const GLObjects = new Array();
+GLObjects.push(null);
 const ASCIIDecoder = new TextDecoder("ascii");
 
 
@@ -33,13 +34,32 @@ let FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png
 let FontAtlasGeom = fetch("font_atlas_signed_distance_field.geom").then(data => data.arrayBuffer());
 let Program = fetch("main.wasm");
 
-const gl = document.getElementById("canvas_webgl").getContext("webgl2");
+const gl = document.getElementById("canvas_webgl")
+           .getContext("webgl2",
+{ 
+  alpha: true, 
+  antialias: false, 
+  depth: true, 
+  failIfMajorPerformanceCaveat: false, 
+  powerPreference: "default",
+  premultipliedAlpha: false, 
+  preserveDrawingBuffer: false, 
+  stencil: false,
+  desynchronized: false
+});
+
 if(!gl)
 {
     let Message = "WebGL 2 context could not be acquired";
     document.body.innerHTML = Message;
     throw Error(Message);
 }
+
+
+console.log(gl.getContextAttributes());
+
+gl.getExtension("EXT_color_buffer_float");
+gl.getExtension("EXT_float_blend");
 
 
 function GetWasmString(Length, Pointer)
@@ -106,6 +126,10 @@ Imports.glTexParameteri = function(Target, Var, Value) { gl.texParameteri(Target
 Imports.glActiveTexture = function(Texture) { gl.activeTexture(Texture); }
 Imports.glUniform1i = function(Location, Value) { gl.uniform1i(GLObjects[Location], Value); }
 Imports.glUniform3f = function(Location, x,y,z) { gl.uniform3f(GLObjects[Location], x,y,z); }
+Imports.glCreateFramebuffer = function() {return PushGLObj(gl.createFramebuffer());}
+Imports.glBindFramebuffer = function(Target, FB) {return gl.bindFramebuffer(Target, GLObjects[FB]);}
+Imports.glFramebufferTexture2D = function(Target, Attachment, TexTarget, Texture, MipLevel) {gl.framebufferTexture2D(Target, Attachment, TexTarget, GLObjects[Texture], MipLevel);}
+Imports.glBlitFramebuffer = function(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter) { gl.blitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);}
 
 Imports.glGetUniformLocation = function(Program, NameLen, NamePtr)
 {
@@ -165,8 +189,24 @@ Imports.glBufferSubData = function(Target, Offset, Size, DataPtr)
 
 Imports.glTexImage2D = function(Target, Level, InternalFormat, Width, Height, Border, Format, Type, DataPtr, DataSize, Offset)
 {
-    const Data = new Uint8Array(WasmMemory.buffer, DataPtr, DataSize);
-    gl.texImage2D(Target, Level, InternalFormat, Width, Height, Border, Format, Type, Data, Offset);
+    if(DataPtr && DataSize)
+    {
+        let Data;
+        if(Type == gl.UNSIGNED_BYTE)
+        {
+            Data = new Uint8Array(WasmMemory.buffer, DataPtr, DataSize);
+        }
+        else if(Type == gl.FLOAT)
+        {
+            Data = new Float32Array(WasmMemory.buffer, DataPtr, DataSize/4);
+        }
+
+        gl.texImage2D(Target, Level, InternalFormat, Width, Height, Border, Format, Type, Data, Offset);
+    }
+    else
+    {
+        gl.texImage2D(Target, Level, InternalFormat, Width, Height, Border, Format, Type, null);
+    }
 }
 
 
@@ -234,12 +274,8 @@ async function Init()
 
     function ResizeHandler()
     {
-        const Ratio = window.devicePixelRatio;
-        const Width = window.innerWidth;
-        const Height = window.innerHeight;
-        gl.canvas.width = Width;
-        gl.canvas.height = Height;
-        console.log("Resize");
+        gl.canvas.width = window.innerWidth;
+        gl.canvas.height = window.innerHeight;
     }
     window.addEventListener('resize', ResizeHandler);
 
@@ -294,7 +330,6 @@ async function Init()
     {
         WasmExports.KeyPress(Event.keyCode, false);
     });
-
 
     let PrevTime = null;
     function RenderLoop(Now)

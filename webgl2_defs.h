@@ -33,11 +33,20 @@
 #define GL_DST_COLOR                      0x0306
 #define GL_ONE_MINUS_DST_COLOR            0x0307
 #define GL_DEPTH_TEST                     0x0B71
+#define GL_DEPTH_COMPONENT                0x1902
+#define GL_DEPTH_COMPONENT16              0x81A5
+#define GL_DEPTH_COMPONENT24              0x81A6
+#define GL_DEPTH_COMPONENT32              0x81A7
+#define GL_DEPTH_COMPONENT32F             0x8CAC
+#define GL_MULTISAMPLE                    0x809D
 #define GL_TEXTURE0                       0x84C0
 #define GL_CULL_FACE                      0x0B44
 #define GL_TEXTURE_2D                     0x0DE1
 #define GL_TEXTURE_MIN_FILTER             0x2801
 #define GL_TEXTURE_MAG_FILTER             0x2800
+#define GL_TEXTURE_WRAP_S                 0x2802
+#define GL_TEXTURE_WRAP_T                 0x2803
+#define GL_CLAMP_TO_EDGE                  0x812F
 #define GL_NEAREST_MIPMAP_NEAREST         0x2700
 #define GL_LINEAR_MIPMAP_NEAREST          0x2701
 #define GL_NEAREST_MIPMAP_LINEAR          0x2702
@@ -52,6 +61,14 @@
 #define GL_FUNC_SUBTRACT                  0x800A
 #define GL_ZERO                           0
 #define GL_ONE                            1
+
+#define GL_FRAMEBUFFER                    0x8D40
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_DEPTH_ATTACHMENT               0x8D00
+#define GL_RGBA                           0x1908
+#define GL_RGBA32F                        0x8814
+#define GL_READ_FRAMEBUFFER               0x8CA8
+#define GL_DRAW_FRAMEBUFFER               0x8CA9
 
 typedef float GLfloat;
 typedef float GLclampf;
@@ -114,6 +131,10 @@ import_from_js void glBindTexture (GLenum target, GLuint texture);
 import_from_js void glGenerateMipmap (GLenum target);
 import_from_js void glActiveTexture (GLenum texture);
 
+import_from_js GLuint glCreateFramebuffer();
+import_from_js void glBindFramebuffer (GLenum target, GLuint framebuffer);
+import_from_js void glFramebufferTexture2D (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+import_from_js void glBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
 
 
 function GLuint glGetUniformLocation(GLuint Program, string Name)

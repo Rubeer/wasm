@@ -239,6 +239,8 @@ Flush(renderer_common *Renderer)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Renderer->IndexBuffer);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, Renderer->IndexCount*sizeof(u16), Renderer->Indices);
 
+    glBindTexture(GL_TEXTURE_2D, State.Text.Texture);
+
     glUseProgram(Renderer->Program);
 
     glDrawElements(GL_TRIANGLES, Renderer->IndexCount, GL_UNSIGNED_SHORT, 0);

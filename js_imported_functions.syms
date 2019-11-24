@@ -46,6 +46,11 @@ glCreateTexture
 glBindTexture
 glGenerateMipmap
 
+glCreateFramebuffer
+glBindFramebuffer
+glFramebufferTexture2D
+glBlitFramebuffer
+
 glDrawArrays
 glDrawArraysInstanced
 glDrawElements

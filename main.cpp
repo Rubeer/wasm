@@ -97,9 +97,30 @@ export_to_js void Init()
     PermanentMemory->Buffer.Contents = (char *)&__heap_base;
     FrameMemory->Buffer = PushBuffer(PermanentMemory, Megabytes(8), ArenaFlag_NoClear);
 
-    InitDefaultRendering(PermanentMemory, FrameMemory, &State.Default);
+    //InitDefaultRendering(PermanentMemory, FrameMemory, &State.Default);
     InitTextRendering(PermanentMemory, FrameMemory, &State.Text);
     InitBoxRendering(PermanentMemory, FrameMemory, &State.Boxes);
+
+    glEnable(GL_DEPTH_TEST);
+
+    State.FramebufferColorTexture = glCreateTexture();
+    glBindTexture(GL_TEXTURE_2D, State.FramebufferColorTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    State.FramebufferDepthTexture = glCreateTexture();
+    glBindTexture(GL_TEXTURE_2D, State.FramebufferDepthTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    State.Framebuffer = glCreateFramebuffer();
+    glBindFramebuffer(GL_FRAMEBUFFER, State.Framebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, State.FramebufferColorTexture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, State.FramebufferDepthTexture, 0);
 
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
@@ -120,21 +141,44 @@ export_to_js void Init()
     State.Camera.Tilt = 0.25f;
     f32 Radius = (f32)State.BoxCount * 0.02f;
     State.Camera.Dolly = Radius + 18;
+
+}
+
+function void Resize(u32 Width, u32 Height)
+{
+    State.LastWidth = Width;
+    State.LastHeight = Height;
+ 
+    glBindTexture(GL_TEXTURE_2D, State.FramebufferColorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, Width, Height, 0, GL_RGBA, GL_FLOAT, 0, 0, 0);
+    glBindTexture(GL_TEXTURE_2D, State.FramebufferDepthTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, Width, Height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, 0, 0, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, Width, Height);
+    glBindFramebuffer(GL_FRAMEBUFFER, State.Framebuffer);
+    glViewport(0, 0, Width, Height);
 }
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
+    if(Width != State.LastWidth || Height != State.LastHeight)
+    {
+        Resize(Width, Height);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, State.Framebuffer);
+    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+
     orbit_camera *Camera = &State.Camera;
 
-    glViewport(0, 0, Width, Height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     v2 MousePixels = State.Input.MousePosPixels;
     v2 RenderDim = v2{(f32)Width, (f32)Height};
     v2 MouseClipSpace = 2.0f*(MousePixels - 0.5f*RenderDim) / RenderDim;
     MouseClipSpace.y = -MouseClipSpace.y;
 
-    v2 MousePos = MouseClipSpace * (f32)Height/(f32)Width;
+    v2 MousePos = MousePixels/(f32)Width;
     v2 MouseDiff = MousePos - State.LastMousePos;
     State.LastMousePos = MousePos;
 
@@ -163,7 +207,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     if(MouseLeft->EndedDown)
     {
         Camera->Orbit -= 0.1f*MouseDiff.x;
-        Camera->Tilt += 0.1f*MouseDiff.y;
+        Camera->Tilt -= 0.1f*MouseDiff.y;
     }
 
 
@@ -211,9 +255,11 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     glUseProgram(State.Text.Common.Program);
     glUniformMatrix4fv(State.Text.Common.Transform, true, &RenderTransform.Forward);
 
+#if 0
     glUseProgram(State.Default.Common.Program);
     glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
     glUniform3f(State.Default.MouseWorldP, HitTest.RayOrigin + HitTest.RayDir*7.5f);
+#endif
 
     glUseProgram(State.Boxes.Program);
     glUniformMatrix4fv(State.Boxes.Transform, true, &RenderTransform.Forward);
@@ -361,7 +407,7 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
 
     Flush(&State.Boxes);
-    Flush(&State.Default.Common);
+    //Flush(&State.Default.Common);
     Flush(&State.Text.Common);
 
     m4x4 HUDProj = HUDProjection(Width, Height);
@@ -375,6 +421,13 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     Flush(&State.Text.Common);
 
     Reset(&State.FrameMemory);
+
+    // TODO(robin) Postprocessing instead of blit
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, State.Framebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, (GLint)Width, (GLint)Height,
+                      0, 0, (GLint)Width, (GLint)Height,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
 }
 
 

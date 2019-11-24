@@ -33,9 +33,16 @@ struct state
     v2 LastMousePos;
 
     user_input Input;
-    renderer_default Default;
+
+    //renderer_default Default;
     renderer_text Text;
     renderer_boxes Boxes;
+    GLuint FullscreenRectangle;
+    GLuint FramebufferColorTexture;
+    GLuint FramebufferDepthTexture;
+    GLuint Framebuffer;
+    u32 LastWidth;
+    u32 LastHeight;
 
     // NOTE(robin): Grows dynamically, should not be cleared
     memory_arena PermanentMemory;
