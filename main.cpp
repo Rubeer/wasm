@@ -52,7 +52,7 @@ export_to_js void KeyPress(u32 KeyCode, bool EndedDown)
 
 export_to_js void MouseWheel(f32 DeltaY)
 {
-    State.Camera.Dolly += 0.001f*State.Camera.Dolly*DeltaY;
+    State.Camera.Dolly += 0.02f*State.Camera.Dolly*Sign(DeltaY);
 }
 
 
@@ -256,24 +256,15 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
         P = Lerp(P, SmoothCurve01(Box->tFlyToMouse), FlyToP);
 
+        if(i != 0)
         {
             v3 P0toP1 = PrevP - P;
             f32 Len = Length(P0toP1);
             v3 Dir = P0toP1 / Len;
-
-            quaternion Q;
-            Q.x = -Dir.y;
-            Q.y = Dir.x;
-            Q.z = 0;
-            Q.w = 1.0f + Dir.z;
-            Q = Normalize(Q);
-
-            f32 HalfLen = 0.5f*Len;
-
             //m3x4 LineTransform = Translation(P) * MatrixAsColumns3x4(X, Y, Z) * Translation(0,0,HalfLen) * Scaling(0.05f,0.05f,HalfLen);
             v3 LineP = P + P0toP1*0.5f;
             v3 LineDim = {0.1f, 0.1f, Len};
-            PushBox(&State.Boxes, LineP, LineDim, Q);
+            PushBox(&State.Boxes, LineP, LineDim, QuaternionLookAt(Dir, Up));
             PrevP = P;
         }
 
@@ -298,7 +289,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         {
             // NOTE(robin): Rotate to face forwards on mouse-over
             Box->tSmooth += DeltaTime*2.0f;
-            Box->Orient = LerpShortestPath(Box->Orient, Box->tSmooth*4.0f*DeltaTime, quaternion{0,0,0,1});
+            v3 RotUp = {0,1,0};//v3 CamUp = {Camera->Y.y, Camera->Y.z, Camera->Y.x};
+            quaternion RotationTarget = QuaternionLookAt(Normalize(P - Camera->P), RotUp);
+            Box->Orient = LerpShortestPath(Box->Orient, Box->tSmooth*4.0f*DeltaTime, RotationTarget);
         }
         else
         {
@@ -320,10 +313,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         //m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
         //m3x4 BoxTransform = UnscaledBoxTransform * Scaling(HalfDim);
 
-        f32 OneThird = 1.0f / 3.0f;
-        f32 B = (0.5f*(1.0f + SineApproxN(V + 0*OneThird)));
-        f32 R = (0.5f*(1.0f + SineApproxN(V + 1*OneThird)));
-        f32 G = (0.5f*(1.0f + SineApproxN(V + 2*OneThird)));
+        f32 B = (0.5f*(1.0f + SineApproxN(V)));
+        f32 R = (0.5f*(1.0f + SineApproxN(V + 1.0f/3.0f)));
+        f32 G = (0.5f*(1.0f + SineApproxN(V + 2.0f/3.0f)));
         //u32 C = RandomSolidColor(&Random);
         u32 C = Pack01RGBA255(R,G,B);
         //PushBox(&State.Default, P, Dim, Box->Orient, C,C,C,C,C,C);
@@ -361,10 +353,9 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
         State.SelectedBoxIndex = ClosestIndex;
     }
 
-    m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(Minimum(Radius*0.1f, 10.0f)) * ZRotationN(Anim[4]);// * Scaling(10.0f);
-
+    //m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(Minimum(Radius*0.1f, 10.0f)) * ZRotationN(Anim[4]);// * Scaling(10.0f);
     //m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
-    u32 C = 0xA0808080;
+    //u32 C = 0xA0808080;
     //PushBox(&State.Default, PlanetTransform, C,C,C,C,C,C);
     //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
 
@@ -372,9 +363,6 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     Flush(&State.Boxes);
     Flush(&State.Default.Common);
     Flush(&State.Text.Common);
-
-
-    Flush(&State.Boxes);
 
     m4x4 HUDProj = HUDProjection(Width, Height);
     glUseProgram(State.Text.Common.Program);

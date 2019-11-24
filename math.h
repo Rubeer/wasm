@@ -765,3 +765,29 @@ function v3 Rotate(v3 V, quaternion Q)
     return V;
 }
 
+
+function quaternion QuaternionLookAt(v3 Dir, v3 Up)
+{
+    quaternion Q;
+    Q.xyz = Cross(Up, Dir);
+    Q.w = 1.0f + Dot(Dir, Up);
+    return Normalize(Q);
+}
+
+function quaternion QuaternionLookAtZ(v3 Dir)
+{
+    // NOTE(robin): Assumes that the up vector is {0, 0, 1}
+    quaternion Q;
+    Q.x = -Dir.y;
+    Q.y = Dir.x;
+    Q.z = 0;
+    Q.w = 1.0f + Dir.z;
+    return Normalize(Q);
+}
+
+function f32 Sign(f32 V)
+{
+    return V < 0.0f ? -1.0f : 1.0f;
+}
+
+

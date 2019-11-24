@@ -198,11 +198,11 @@ float LightFrom(vec3 LightPosition, float Brightness)
 
 void main()
 {
-    VertColor.a = Color.a;
 
     float SkyLight = LightFrom(vec3(0, 100.0, 300.0), 30000.0);
     float MouseLight = LightFrom(MouseWorldP, 40.0);
 
+    VertColor.a = Color.a;
     VertColor.rgb = Color.rgb*min(1.0, SkyLight + MouseLight);
 
     gl_Position = Transform*vec4(Position, 1.0);
@@ -426,14 +426,14 @@ InitBoxRendering(memory_arena *PermMem, memory_arena *TmpMem, renderer_boxes *Re
     Renderer->MaxInstanceCount = MaxInstanceCount;
     Renderer->InstanceData = PushArray(PermMem, box_instance, Renderer->MaxInstanceCount, ArenaFlag_NoClear);
 
-    v3 P0 = {-1, -1,  1};
-    v3 P1 = { 1, -1,  1};
-    v3 P2 = {-1, -1, -1};
-    v3 P3 = { 1, -1, -1};
-    v3 P4 = {-1,  1,  1};
-    v3 P5 = { 1,  1,  1};
-    v3 P6 = {-1,  1, -1};
-    v3 P7 = { 1,  1, -1};
+    v3 P0 = {-0.5f, -0.5f,  0.5f};
+    v3 P1 = { 0.5f, -0.5f,  0.5f};
+    v3 P2 = {-0.5f, -0.5f, -0.5f};
+    v3 P3 = { 0.5f, -0.5f, -0.5f};
+    v3 P4 = {-0.5f,  0.5f,  0.5f};
+    v3 P5 = { 0.5f,  0.5f,  0.5f};
+    v3 P6 = {-0.5f,  0.5f, -0.5f};
+    v3 P7 = { 0.5f,  0.5f, -0.5f};
 
     v3 N0 = { 0,-1, 0};
     v3 N1 = { 1, 0, 0};
@@ -514,15 +514,15 @@ InitBoxRendering(memory_arena *PermMem, memory_arena *TmpMem, renderer_boxes *Re
     glEnableVertexAttribArray(4);
     glEnableVertexAttribArray(5);
 
-    glVertexAttribPointer(2, 3, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, P));
-    glVertexAttribPointer(3, 3, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, Dim));
-    glVertexAttribPointer(4, 4, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, Orient));
-    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, true, sizeof(box_instance), (void *)OffsetOf(box_instance, Color));
-
     glVertexAttribDivisor(2, 1);
     glVertexAttribDivisor(3, 1);
     glVertexAttribDivisor(4, 1);
     glVertexAttribDivisor(5, 1);
+
+    glVertexAttribPointer(2, 3, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, P));
+    glVertexAttribPointer(3, 3, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, Dim));
+    glVertexAttribPointer(4, 4, GL_FLOAT, false, sizeof(box_instance), (void *)OffsetOf(box_instance, Orient));
+    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, true, sizeof(box_instance), (void *)OffsetOf(box_instance, Color));
 
     
     string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
@@ -561,15 +561,14 @@ float LightFrom(vec3 LightPosition, float Brightness)
 
 void main()
 {
-    Position = RotateByQuaternion(VertexPosition*InstanceDim*0.5, InstanceOrient) + InstancePosition;
+    Position = RotateByQuaternion(VertexPosition*InstanceDim, InstanceOrient) + InstancePosition;
     Normal = RotateByQuaternion(VertexNormal, InstanceOrient);
     vec4 Color = InstanceColor;
-
-    VertColor.a = Color.a;
 
     float SkyLight = LightFrom(vec3(0, 100.0, 300.0), 30000.0);
     float MouseLight = LightFrom(MouseWorldP, 40.0);
 
+    VertColor.a = Color.a;
     VertColor.rgb = Color.rgb*min(1.0, SkyLight + MouseLight);
 
     gl_Position = Transform*vec4(Position, 1.0);
