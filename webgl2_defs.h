@@ -46,6 +46,7 @@
 #define GL_TEXTURE_MAG_FILTER             0x2800
 #define GL_TEXTURE_WRAP_S                 0x2802
 #define GL_TEXTURE_WRAP_T                 0x2803
+#define GL_TEXTURE_WRAP_R                 0x8072
 #define GL_CLAMP_TO_EDGE                  0x812F
 #define GL_NEAREST_MIPMAP_NEAREST         0x2700
 #define GL_LINEAR_MIPMAP_NEAREST          0x2701
@@ -71,6 +72,8 @@
 #define GL_RGBA32F                        0x8814
 #define GL_READ_FRAMEBUFFER               0x8CA8
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
+
+#define GL_TEXTURE_CUBE_MAP               0x8513
 
 typedef float GLfloat;
 typedef float GLclampf;

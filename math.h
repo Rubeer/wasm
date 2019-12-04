@@ -639,17 +639,6 @@ struct orbit_camera
     v3 Z;
 };
 
-function m4x4_inv
-MakeCameraOrbitTransform(orbit_camera *Camera)
-{
-    m3x4 CameraRotation = ZRotationN(Camera->Orbit) * XRotationN(Camera->Tilt);
-    Camera->P = CameraRotation * v3{0, 0, Camera->Dolly};
-    Camera->X = GetColumn(CameraRotation, 0);
-    Camera->Y = GetColumn(CameraRotation, 1);
-    Camera->Z = GetColumn(CameraRotation, 2);
-    m4x4_inv Transform = MakeCameraTransform(Camera->X, Camera->Y, Camera->Z, Camera->P);
-    return Transform;
-}
 
 union quaternion
 {
@@ -783,6 +772,57 @@ function quaternion QuaternionLookAtZ(v3 Dir)
     Q.z = 0;
     Q.w = 1.0f + Dir.z;
     return Normalize(Q);
+}
+
+function quaternion QuaternionFromAxisAngleN(v3 Axis, f32 Angle)
+{
+    quaternion Result;
+    Result.xyz = Axis * SineApproxN(Angle*0.5f);
+    Result.w = CosineApproxN(Angle*0.5f);
+  return Result;
+}
+
+function quaternion MatrixOrientToQuaternion(m3x4 const &M)
+{
+    quaternion Q;
+    f32 Trace = M.E[0][0] + M.E[1][1] + M.E[2][2];
+    if(Trace > 0)
+    {
+        f32 s = 0.5f / SquareRoot(Trace + 1.0f);
+        Q.w = 0.25f / s;
+        Q.x = ( M.E[2][1] - M.E[1][2] ) * s;
+        Q.y = ( M.E[0][2] - M.E[2][0] ) * s;
+        Q.z = ( M.E[1][0] - M.E[0][1] ) * s;
+    }
+    else
+    {
+        if(M.E[0][0] > M.E[1][1] && M.E[0][0] > M.E[2][2] )
+        {
+            f32 s = 2.0f * SquareRoot(1.0f + M.E[0][0] - M.E[1][1] - M.E[2][2]);
+            Q.w = (M.E[2][1] - M.E[1][2]) / s;
+            Q.x = 0.25f * s;
+            Q.y = (M.E[0][1] + M.E[1][0]) / s;
+            Q.z = (M.E[0][2] + M.E[2][0]) / s;
+        }
+        else if(M.E[1][1] > M.E[2][2])
+        {
+            f32 s = 2.0f * SquareRoot(1.0f + M.E[1][1] - M.E[0][0] - M.E[2][2]);
+            Q.w = (M.E[0][2] - M.E[2][0]) / s;
+            Q.x = (M.E[0][1] + M.E[1][0]) / s;
+            Q.y = 0.25f * s;
+            Q.z = (M.E[1][2] + M.E[2][1]) / s;
+        }
+        else
+        {
+            f32 s = 2.0f * SquareRoot(1.0f + M.E[2][2] - M.E[0][0] - M.E[1][1]);
+            Q.w = (M.E[1][0] - M.E[0][1]) / s;
+            Q.x = (M.E[0][2] + M.E[2][0]) / s;
+            Q.y = (M.E[1][2] + M.E[2][1]) / s;
+            Q.z = 0.25f * s;
+        }
+    }
+
+    return Q;
 }
 
 function f32 Sign(f32 V)

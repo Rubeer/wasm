@@ -22,24 +22,16 @@ struct data_box
     f32 tSmooth;
     f32 tFlyToMouse;
 
-    string Name;
-    string Email;
-};
-
-struct data_box_array
-{
-    string FavoriteFruit;
-    u32 Count;
-    u32 Capacity;
-    u32 Selected;
-    data_box *Data;
+    string Text;
+    u32 Color;
 };
 
 struct state
 {
-    u32 BoxArrayCount;
-    data_box_array BoxArrays[8];
-    u32 SelectedBoxArray;
+    u32 DataBoxCount;
+    u32 MaxDataBoxes;
+    data_box *DataBoxes;
+    u32 SelectedDataBox;
 
     orbit_camera Camera;
     v2 LastMousePos;

@@ -1,7 +1,4 @@
 
-function void AllocateBuffers(memory_arena *Memory, renderer_text *Renderer, u32 MaxIndexCount, u32 MaxVertexCount = (1 << 16) - 1)
-{
-}
 
 global string CommonShaderHeader = S(R"HereDoc(#version 300 es
 precision highp float;
@@ -205,6 +202,49 @@ AllocateVerticesAndIndices(renderer_text *Renderer, u32 RequestedVertexCount, u3
     return Target;
 }
 
+struct rectangle2
+{
+    v2 Min;
+    v2 Max;
+};
+
+function bool
+NextChar(rectangle2 *Bounds, v2 *TextAdvance, char Char, font_atlas_char Geom)
+{
+    if(Char == '\n')
+    {
+        TextAdvance->x = 0;
+        TextAdvance->y -= FONT_GLYPH_SIZE / 256.0f;
+    }
+
+    Bounds->Min = Geom.Offset + *TextAdvance;
+    TextAdvance->x += Geom.Advance;
+    v2 Dim = Geom.Max - Geom.Min;
+    Bounds->Max  = Bounds->Min + Dim;
+
+    return Char > ' ';
+}
+
+function v2 GetTextDim(renderer_text *Renderer, string Text)
+{
+    v2 TextAdvance = {};
+    v2 Result = {};
+    font_atlas_char *Geometry = Renderer->Geometry;
+    for(size i = 0; i < Text.Size; ++i)
+    {
+        char Char = Text.Contents[i];
+        font_atlas_char Geom = Geometry[(u8)Char];
+        rectangle2 Bounds;
+        NextChar(&Bounds, &TextAdvance, Char, Geom);
+        Result.x = Maximum(AbsoluteValue(TextAdvance.x), Result.x);
+        Result.y = Maximum(AbsoluteValue(TextAdvance.y), Result.y);
+    }
+    
+    Result.y += FONT_GLYPH_SIZE / 256.0f;
+
+    return Result;
+}
+
 function void
 PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityMatrix3x4, u32 Color = Color32_White)
 {
@@ -215,51 +255,45 @@ PushText(renderer_text *Renderer, string Text, m3x4 const &Transform = IdentityM
     for(size i = 0; i < Text.Size; ++i)
     {
         char Char = Text.Contents[i];
-        if(Char == '\n')
-        {
-            TextAdvance.x = 0;
-            TextAdvance.y -= FONT_GLYPH_SIZE / 256.0f;
-            Renderer->VertexCount -= 4;
-            Renderer->IndexCount -= 6;
-            continue;
-        }
-
         font_atlas_char Geom = Geometry[(u8)Char];
 
-        v2 Min = Geom.Offset + TextAdvance;
-        TextAdvance.x += Geom.Advance;
-        v2 Dim = Geom.Max - Geom.Min;
-        v2 Max = Min + Dim;
+        rectangle2 Bounds;
+        if(NextChar(&Bounds, &TextAdvance, Char, Geom))
+        {
+            Target.V[0].P = Transform * v3{Bounds.Min.x, Bounds.Max.y, 0};
+            Target.V[1].P = Transform * v3{Bounds.Max.x, Bounds.Max.y, 0};
+            Target.V[2].P = Transform * v3{Bounds.Min.x, Bounds.Min.y, 0};
+            Target.V[3].P = Transform * v3{Bounds.Max.x, Bounds.Min.y, 0};
 
-        Target.V[0].P = Transform * v3{Min.x, Max.y, 0};
-        Target.V[1].P = Transform * v3{Max.x, Max.y, 0};
-        Target.V[2].P = Transform * v3{Min.x, Min.y, 0};
-        Target.V[3].P = Transform * v3{Max.x, Min.y, 0};
+            v2 UVMin = Geom.Min;// * UVScale;
+            v2 UVMax = Geom.Max;// * UVScale;
+            Target.V[0].UV = UVMin;
+            Target.V[1].UV = {UVMax.x, UVMin.y};
+            Target.V[2].UV = {UVMin.x, UVMax.y};
+            Target.V[3].UV = UVMax;
 
-        v2 UVMin = Geom.Min;// * UVScale;
-        v2 UVMax = Geom.Max;// * UVScale;
-        Target.V[0].UV = UVMin;
-        Target.V[1].UV = {UVMax.x, UVMin.y};
-        Target.V[2].UV = {UVMin.x, UVMax.y};
-        Target.V[3].UV = UVMax;
+            Target.V[0].C = Color;
+            Target.V[1].C = Color;
+            Target.V[2].C = Color;
+            Target.V[3].C = Color;
 
-        Target.V[0].C = Color;
-        Target.V[1].C = Color;
-        Target.V[2].C = Color;
-        Target.V[3].C = Color;
+            Target.I[0] = Target.FirstIndex + 2;
+            Target.I[1] = Target.FirstIndex + 1;
+            Target.I[2] = Target.FirstIndex + 0;
 
-        Target.I[0] = Target.FirstIndex + 2;
-        Target.I[1] = Target.FirstIndex + 1;
-        Target.I[2] = Target.FirstIndex + 0;
+            Target.I[3] = Target.FirstIndex + 1;
+            Target.I[4] = Target.FirstIndex + 2;
+            Target.I[5] = Target.FirstIndex + 3;
 
-        Target.I[3] = Target.FirstIndex + 1;
-        Target.I[4] = Target.FirstIndex + 2;
-        Target.I[5] = Target.FirstIndex + 3;
-
-        Target.I += 6;
-        Target.V += 4;
-        Target.FirstIndex += 4;
-
+            Target.I += 6;
+            Target.V += 4;
+            Target.FirstIndex += 4;
+        }
+        else
+        {
+            Renderer->VertexCount -= 4;
+            Renderer->IndexCount -= 6;
+        }
     }
 }
 
@@ -490,27 +524,6 @@ function void PushBox(renderer_boxes *Renderer, v3 Pos, v3 Dim, quaternion Orien
 function void
 InitPostProcessing(memory_arena *PermMem, memory_arena *TmpMem, renderer_postprocessing *Renderer)
 {
-    v2 Rectangle[] = 
-    {
-        {-1, -1},
-        { 1, -1},
-        {-1,  1},
-
-        { 1, -1},
-        { 1,  1},
-        {-1,  1},
-    };
-
-    Renderer->VertexArray = glCreateVertexArray();
-    glBindVertexArray(Renderer->VertexArray);
-
-    Renderer->RectangleBuffer = glCreateBuffer();
-    glBindBuffer(GL_ARRAY_BUFFER, Renderer->RectangleBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Rectangle), Rectangle, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(v2), 0);
-    
     string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
 layout (location=0) in vec2 Position;
 
@@ -654,12 +667,84 @@ void main()
     Renderer->MouseWorldP = glGetUniformLocation(Renderer->Program, S("MouseWorldP"));
 }
 
+import_from_js void JS_GL_LoadSkyboxFacesToBoundTexture();
+function void InitSkyboxRendering(memory_arena *PermMem, memory_arena *TmpMem, renderer_skybox *Renderer)
+{
+    Renderer->Texture = glCreateTexture();
+    glBindTexture(GL_TEXTURE_CUBE_MAP, Renderer->Texture);
+
+    JS_GL_LoadSkyboxFacesToBoundTexture();
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);  
+
+    string VertexSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+layout (location=0) in vec3 Position;
+uniform mat4 Transform;
+
+out vec3 Direction;
+
+void main()
+{
+    Direction = Position;
+    gl_Position = Transform * vec4(Position, 1.0);
+}
+)HereDoc"));
+
+
+    string FragmentSource = Concat(TmpMem, CommonShaderHeader, S(R"HereDoc(
+in vec3 Direction;
+out vec4 FragColor;
+
+uniform samplerCube SkyboxSampler;
+
+void main()
+{
+    FragColor.rgb = texture(SkyboxSampler, Direction).rgb;
+    FragColor.a = 1.0f;
+}
+)HereDoc"));
+
+    Renderer->Program = JS_GL_CreateCompileAndLinkProgram(VertexSource, FragmentSource);
+    Renderer->SkyboxSampler = glGetUniformLocation(Renderer->Program, S("SkyboxSampler"));
+    Renderer->Transform = glGetUniformLocation(Renderer->Program, S("Transform"));
+
+}
+
 function void InitRenderer(memory_arena *PermMem, memory_arena *TmpMem, renderer *Renderer)
 {
+    {
+        v2 Rectangle[] = 
+        {
+            {-1, -1},
+            { 1, -1},
+            {-1,  1},
+
+            { 1, -1},
+            { 1,  1},
+            {-1,  1},
+        };
+
+        Renderer->RectangleVertexArray = glCreateVertexArray();
+        glBindVertexArray(Renderer->RectangleVertexArray);
+
+        Renderer->RectangleBuffer = glCreateBuffer();
+        glBindBuffer(GL_ARRAY_BUFFER, Renderer->RectangleBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Rectangle), Rectangle, GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, sizeof(v2), 0);
+    }
+
+
     InitBoxRendering(PermMem, TmpMem, &Renderer->Boxes);
     InitTextRendering(PermMem, TmpMem, &Renderer->Text);
     InitMeshRendering(PermMem, TmpMem, &Renderer->Mesh);
     InitPostProcessing(PermMem, TmpMem, &Renderer->PostProcessing);
+    InitSkyboxRendering(PermMem, TmpMem, &Renderer->Skybox);
 
     Renderer->FramebufferColorTexture = glCreateTexture();
     glBindTexture(GL_TEXTURE_2D, Renderer->FramebufferColorTexture);
@@ -685,6 +770,6 @@ function void InitRenderer(memory_arena *PermMem, memory_arena *TmpMem, renderer
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 }
 

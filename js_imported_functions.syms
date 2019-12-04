@@ -4,6 +4,8 @@ JS_GL_CreateCompileAndLinkProgram
 JS_GetFontAtlas
 JS_GetBusMeshSize
 JS_GetBusMesh
+JS_GL_LoadSkyboxFacesToBoundTexture
+
 
 glEnable
 glDisable

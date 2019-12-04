@@ -133,9 +133,17 @@ struct renderer_postprocessing
 {
     GLuint Program;
     GLuint FramebufferSampler;
-    GLuint VertexArray;
-    GLuint RectangleBuffer;
 };
+
+struct renderer_skybox
+{
+    GLuint Program;
+    GLuint SkyboxSampler;
+    GLuint Transform;
+
+    GLuint Texture;
+};
+
 
 struct renderer
 {
@@ -143,6 +151,10 @@ struct renderer
     renderer_text Text;
     renderer_mesh Mesh;
     renderer_postprocessing PostProcessing;
+    renderer_skybox Skybox;
+
+    GLuint RectangleBuffer;
+    GLuint RectangleVertexArray;
 
     GLuint FramebufferColorTexture;
     GLuint FramebufferDepthTexture;

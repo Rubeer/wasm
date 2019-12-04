@@ -1,12 +1,5 @@
 
 firebase.initializeApp(firebaseConfig);
-const pir = firebase.firestore().collection('pir').limit(50).onSnapshot((snapshot) =>
-{
-    snapshot.docChanges().forEach(change => {
-        console.log(change.doc.data());
-    });
-});
-
 
 const Imports = {};
 
@@ -40,22 +33,32 @@ async function LoadImageAsRawPixels(FileName)
     return Data;
 }
 
-let Program = fetch("main.wasm");
+let SkyboxFaces = new Array();
+SkyboxFaces.push(LoadImageAsRawPixels("skybox/right1.png"));
+SkyboxFaces.push(LoadImageAsRawPixels("skybox/left2.png"));
+SkyboxFaces.push(LoadImageAsRawPixels("skybox/top3.png"));
+SkyboxFaces.push(LoadImageAsRawPixels("skybox/bottom4.png"));
+SkyboxFaces.push(LoadImageAsRawPixels("skybox/front5.png"));
+SkyboxFaces.push(LoadImageAsRawPixels("skybox/back6.png"));
+
 let BusMesh = fetch("bus.bin").then(data => data.arrayBuffer());
+let Program = fetch("main.wasm");
 let FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png");
 let FontAtlasGeom = fetch("font_atlas_signed_distance_field.geom").then(data => data.arrayBuffer());
 
+/*
 let TestData = null;
 async function GetTestDataFromJson(path)
 {
     TestData = await fetch(path).then(data => data.json());
 }
 GetTestDataFromJson("generated.json");
+*/
 
 const gl = document.getElementById("canvas_webgl")
            .getContext("webgl2",
 { 
-  alpha: false, 
+  alpha: true, 
   antialias: false, 
   depth: true, 
   failIfMajorPerformanceCaveat: false, 
@@ -285,6 +288,9 @@ Imports.JS_GetFontAtlas = function(PixelsPtr, PixelsSize, GeomPtr, GeomSize)
 
     new Uint8Array(WasmMemory.buffer, PixelsPtr, PixelsSize).set(new Uint8Array(FontAtlasPixels));
     new Uint8Array(WasmMemory.buffer, GeomPtr, GeomSize).set(new Uint8Array(FontAtlasGeom));
+
+    FontAtlasPixels = null;
+    FontAtlasGeom = null;
 }
 
 Imports.JS_GetBusMeshSize = function()
@@ -296,9 +302,30 @@ Imports.JS_GetBusMesh = function(Ptr)
     new Uint8Array(WasmMemory.buffer, Ptr, BusMesh.byteLength).set(new Uint8Array(BusMesh));
 }
 
+Imports.JS_GL_LoadSkyboxFacesToBoundTexture = function()
+{
+    for(let i = 0; i < SkyboxFaces.length; ++i)
+    {
+        const Data = new Uint8Array(SkyboxFaces[i]);
+        SkyboxFaces[i] = null;
+        // TODO(robin): Don't hardcore these
+        const Width = 1024;
+        const Height = 1024;
+        if(Data.byteLength != Width*Height*4)
+        {
+            throw Error("Unexpected image dimensions");
+        }
+        gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.RGBA, Width, Height, 0, gl.RGBA, gl.UNSIGNED_BYTE, Data, 0);
+    }
+
+    SkyboxFaces = null;
+}
+
 async function Init()
 {
     Program = WebAssembly.instantiateStreaming(Program, {"env":Imports});
+
+    SkyboxFaces = await Promise.all(SkyboxFaces);
 
     FontAtlasGeom = await FontAtlasGeom;
     FontAtlasPixels = await FontAtlasPixels;
@@ -369,12 +396,44 @@ async function Init()
         WasmExports.KeyPress(Event.keyCode, false);
     });
 
+
+    /*
+    firebase.firestore().collection('blocks').onSnapshot(function(snapshot)
+    {
+        snapshot.docChanges().forEach(function(change)
+        {
+            const block = change.doc.data();
+            console.log(change);
+
+            const Str = block.name + '\n' + block.message;
+            const StrPtr = AddJSStringToWasm(Str);
+            const Color = Number.isInteger(block.color) ? block.color : 0xFF888888;
+            if(change.type === "added")
+            {
+                WasmExports.AddDataBox(Str.length, StrPtr, Color);
+            }
+            else if(change.type === "modified")
+            {
+                WasmExports.UpdateDataBox(change.doc.newIndex, Str.length, StrPtr, Color);
+            }
+        });
+    });
+    */
+
+    /*
+    let ref = firebase.database().ref('blocks');
+    ref.on('child_added', snapshot =>
+    {
+    });
+    */
+
     let TestDataIndex = 0;
     let PrevTime = null;
     function RenderLoop(Now)
     {
         window.requestAnimationFrame(RenderLoop);
 
+        /*
         if(TestData)
         {
             for(let i = 0; i < 128; ++i)
@@ -382,15 +441,13 @@ async function Init()
                 if(TestDataIndex < TestData.length/128)
                 {
                     const Data = TestData[TestDataIndex++];
-                    const Name = AddJSStringToWasm(Data.name);
-                    const Email = AddJSStringToWasm(Data.email);
-                    const Fruit = AddJSStringToWasm(Data.favoriteFruit);
-                    WasmExports.AddTestData(Data.name.length, Name,
-                                            Data.email.length, Email,
-                                            Data.favoriteFruit.length, Fruit);
+
+                    const Str = Data.name + '\n' + Data.email + '\n';
+                    const Name = AddJSStringToWasm(Str);
                 }
             }
         }
+        */
         
         const DeltaTime = PrevTime ? (Now - PrevTime) : (1000.0/60.0);
         PrevTime = Now;
