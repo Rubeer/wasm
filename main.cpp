@@ -55,6 +55,40 @@ export_to_js void MouseWheel(f32 DeltaY)
     State.Camera.Dolly += 0.002f*State.Camera.Dolly*DeltaY;
 }
 
+export_to_js void *AllocatePermanent(u32 Length)
+{
+    return PushSize(&State.PermanentMemory, Length);
+}
+
+export_to_js void AddTestData(u32 NameLength, char *NamePtr,
+                              u32 EmailLength, char *EmailPtr,
+                              u32 FruitLength, char *FruitPtr)
+{
+    data_box Box = {};
+    Box.Name = {NameLength, NamePtr};
+    Box.Email = {EmailLength, EmailPtr};
+    Box.Orient = {0, 0, 0, 1};
+    
+    string Fruit = {FruitLength, FruitPtr};
+
+    for(u32 BoxArrayIndex = 0;
+            BoxArrayIndex < State.BoxArrayCount;
+            ++BoxArrayIndex)
+    {
+        data_box_array *Array = State.BoxArrays + BoxArrayIndex;
+        if(AreEqual(Array->FavoriteFruit, Fruit))
+        {
+            Assert(Array->Count < Array->Capacity);
+            Array->Data[Array->Count++] = Box;
+            return;
+        }
+    }
+
+    Assert(State.BoxArrayCount < ArrayCount(State.BoxArrays));
+    data_box_array *Array = State.BoxArrays + State.BoxArrayCount++;
+    Array->FavoriteFruit = Fruit;
+    Array->Data[Array->Count++] = Box;
+}
 
 struct hit_test
 {
@@ -97,81 +131,64 @@ export_to_js void Init()
     PermanentMemory->Buffer.Contents = (char *)&__heap_base;
     FrameMemory->Buffer = PushBuffer(PermanentMemory, Megabytes(8), ArenaFlag_NoClear);
 
-    //InitDefaultRendering(PermanentMemory, FrameMemory, &State.Default);
-    InitTextRendering(PermanentMemory, FrameMemory, &State.Text);
-    InitBoxRendering(PermanentMemory, FrameMemory, &State.Boxes);
-    InitPostProcessing(PermanentMemory, FrameMemory, &State.PostProcessing);
+    InitRenderer(PermanentMemory, FrameMemory, &State.Renderer);
 
-    glEnable(GL_DEPTH_TEST);
-
-    State.FramebufferColorTexture = glCreateTexture();
-    glBindTexture(GL_TEXTURE_2D, State.FramebufferColorTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    State.FramebufferDepthTexture = glCreateTexture();
-    glBindTexture(GL_TEXTURE_2D, State.FramebufferDepthTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    State.Framebuffer = glCreateFramebuffer();
-    glBindFramebuffer(GL_FRAMEBUFFER, State.Framebuffer);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, State.FramebufferColorTexture, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, State.FramebufferDepthTexture, 0);
-
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendEquation(GL_FUNC_ADD);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-
-    State.MaxBoxCount = 40960;
-    State.BoxCount = State.MaxBoxCount;
-    State.BoxAnimations = PushArray(PermanentMemory, box_animation, State.MaxBoxCount);
-    for(u32 i = 0; i < State.MaxBoxCount; ++i)
+    State.SelectedBoxArray = U32Max;
+    for(u32 i = 0; i < ArrayCount(State.BoxArrays); ++i)
     {
-        State.BoxAnimations[i].Orient.w = 1;
+        data_box_array *Array = State.BoxArrays + i;
+        Array->Selected = U32Max;
+        Array->Capacity = (1 << 16);
+        Array->Data = PushArray(&State.PermanentMemory, data_box, Array->Capacity);
     }
-    State.SelectedBoxIndex = U32Max;
     
-    State.Camera.Tilt = 0.25f;
-    f32 Radius = 150.0f;//(f32)State.BoxCount * 0.02f;
-    State.Camera.Dolly = Radius + 18;
+    State.Camera.Tilt = 0.15f;
+    State.Camera.Dolly = 100;
 
-}
-
-function void Resize(u32 Width, u32 Height)
-{
-    State.LastWidth = Width;
-    State.LastHeight = Height;
- 
-    glBindTexture(GL_TEXTURE_2D, State.FramebufferColorTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, Width, Height, 0, GL_RGBA, GL_FLOAT, 0, 0, 0);
-    glBindTexture(GL_TEXTURE_2D, State.FramebufferDepthTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, Width, Height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, 0, 0, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, Width, Height);
-    glBindFramebuffer(GL_FRAMEBUFFER, State.Framebuffer);
-    glViewport(0, 0, Width, Height);
 }
 
 export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 {
-    if(Width != State.LastWidth || Height != State.LastHeight)
+    orbit_camera *Camera = &State.Camera;
+    renderer *Renderer = &State.Renderer;
+
     {
-        Resize(Width, Height);
+        // NOTE(robin): Get averaged frame rate
+        // TODO(robin): Sliding window might be better
+        local_persist f32 dtSamples[4];
+        local_persist u32 dtSampleIndex;
+        dtSamples[dtSampleIndex] = DeltaTime;
+        dtSampleIndex = (dtSampleIndex + 1) % ArrayCount(dtSamples);
+        DeltaTime = 0;
+        for(u32 i = 0; i < ArrayCount(dtSamples); ++i)
+        {
+            DeltaTime += dtSamples[i];
+        }
+        DeltaTime /= ArrayCount(dtSamples);
+
+        if(DeltaTime < 0.001f || DeltaTime > 0.1f)
+        {
+            DeltaTime = 1.0f/60.0f;
+        }
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, State.Framebuffer);
+    u32 LastFrameTriangleCount = Renderer->Boxes.TrianglesRendered +
+                                 Renderer->Text.TrianglesRendered +
+                                 Renderer->Mesh.IndexCount/3;
+
+    Renderer->Boxes.TrianglesRendered = 0;
+    Renderer->Text.TrianglesRendered = 0;
+
+    if(Width != Renderer->LastWidth || Height != Renderer->LastHeight)
+    {
+        Renderer->LastWidth = Width;
+        Renderer->LastHeight = Height;
+        ResizeRendering(Renderer, Width, Height);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, Renderer->Framebuffer);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
-    orbit_camera *Camera = &State.Camera;
 
 
     v2 MousePixels = State.Input.MousePosPixels;
@@ -207,8 +224,8 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     button *MouseLeft = &State.Input.MouseLeft;
     if(MouseLeft->EndedDown)
     {
-        Camera->Orbit -= 0.1f*MouseDiff.x;
-        Camera->Tilt -= 0.1f*MouseDiff.y;
+        Camera->Orbit -= 0.2f*MouseDiff.x;
+        Camera->Tilt -= 0.2f*MouseDiff.y;
     }
 
 
@@ -251,20 +268,15 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     HitTest.LastHitDistance = F32Max;
 
     u32 ClosestIndex = U32Max;
+    u32 ClosestArrayIndex = U32Max;
     f32 ClosestDistance = F32Max;
 
-    glUseProgram(State.Text.Common.Program);
-    glUniformMatrix4fv(State.Text.Common.Transform, true, &RenderTransform.Forward);
+    glUseProgram(Renderer->Text.Program);
+    glUniformMatrix4fv(Renderer->Text.Transform, true, &RenderTransform.Forward);
 
-#if 0
-    glUseProgram(State.Default.Common.Program);
-    glUniformMatrix4fv(State.Default.Common.Transform, true, &RenderTransform.Forward);
-    glUniform3f(State.Default.MouseWorldP, HitTest.RayOrigin + HitTest.RayDir*7.5f);
-#endif
-
-    glUseProgram(State.Boxes.Program);
-    glUniformMatrix4fv(State.Boxes.Transform, true, &RenderTransform.Forward);
-    glUniform3f(State.Boxes.MouseWorldP, HitTest.RayOrigin + HitTest.RayDir*7.5f);
+    glUseProgram(Renderer->Boxes.Program);
+    glUniformMatrix4fv(Renderer->Boxes.Transform, true, &RenderTransform.Forward);
+    glUniform3f(Renderer->Boxes.MouseWorldP, HitTest.RayOrigin + HitTest.RayDir*7.5f);
 
     local_persist f32 RotSpeed;
     button *Keys = State.Input.Keys;
@@ -280,125 +292,143 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
 
     Anim[0] += RotSpeed;
 
-    v3 PrevP = {};
+
 
     random_state Random = DefaultSeed();
-    for(u32 i = 0; i < State.BoxCount; ++i)
+    u32 RelBoxIndex = 0;
+    u32 AbsoluteBoxIndex = 0;
+
+    for(u32 BoxArrayIndex = 0;
+            BoxArrayIndex < State.BoxArrayCount;
+            ++BoxArrayIndex)
     {
-        box_animation *Box = State.BoxAnimations + i;
+        data_box_array *Array = State.BoxArrays + BoxArrayIndex;
+        v3 PrevP = {};
 
-        f32 V = (f32)i / (f32)State.BoxCount;
+        f32 Spacing = 0.15f;
+        f32 Orbit = ((f32)BoxArrayIndex / (f32)State.BoxArrayCount);
 
-        v3 P = OrbitCenter;
-        P.x += (25.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*CosineApproxN(V+Anim[0]);
-        P.y += (25.0f + Radius*0.1f)*RandomBilateral(&Random) + Radius*SineApproxN(V+Anim[0]);
-        P.z += CosineApproxN(V + RandomBilateral(&Random)) * 50.0f;
-
-        v3 Dim = v3{0.9f, 0.9f, 0.9f};
-        v3 HalfDim = Dim*0.5f;
-
-        bool Selected = (i == State.SelectedBoxIndex);
-        Box->tFlyToMouse += Selected ? DeltaTime : -DeltaTime;
-        Box->tFlyToMouse = Clamp01(Box->tFlyToMouse);
-        v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
-        P = Lerp(P, SmoothCurve01(Box->tFlyToMouse), FlyToP);
-
-        if(i != 0)
+        for(u32 BoxIndex = 0;
+                BoxIndex < Array->Count;
+                ++BoxIndex, ++AbsoluteBoxIndex)
         {
-            v3 P0toP1 = PrevP - P;
-            f32 Len = Length(P0toP1);
-            v3 Dir = P0toP1 / Len;
-            //m3x4 LineTransform = Translation(P) * MatrixAsColumns3x4(X, Y, Z) * Translation(0,0,HalfLen) * Scaling(0.05f,0.05f,HalfLen);
-            v3 LineP = P + P0toP1*0.5f;
-            v3 LineDim = {0.1f, 0.1f, Len};
-            PushBox(&State.Boxes, LineP, LineDim, QuaternionLookAt(Dir, Up));
-            PrevP = P;
-        }
+            data_box *Box = Array->Data  + BoxIndex;
 
-        // TODO(robin) Symbolically solve
-        m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * QuaternionRotationMatrix(Conjugate(Box->Orient)) * Translation(-P);
-        bool RayHit = RaycastBox(&HitTest, InverseBoxTransform);
+            f32 V = Orbit + ((1.0f - Spacing) * (f32)BoxIndex / (f32)Array->Count) / (f32)State.BoxArrayCount;
 
-        v3 AngleDiff = {RandomBilateral(&Random),
-                        RandomBilateral(&Random),
-                        RandomBilateral(&Random)};
+            Box->P = OrbitCenter;
+            Box->P.x += (0.5f + 0.5f*RandomUnilateral(&Random)) * 100*CosineApproxN(V+Anim[0]);
+            Box->P.y += (0.5f + 0.5f*RandomUnilateral(&Random)) * 100*SineApproxN(V+Anim[0]);
+            //Box->P.y += (15.0f)*RandomBilateral(&Random) + 60*SineApproxN(V+Anim[0]);
+            Box->P.z += CosineApproxN(Anim[0] + V + RandomBilateral(&Random)) * 30.0f;
 
-        if(!Selected)
-        {
-            // NOTE(robin): Idle rotation
-            AngleDiff = AngleDiff * 0.1f * DeltaTime * (1.0f - Box->tSmooth);
-            quaternion Diff = QuaternionFromAnglesN(AngleDiff);
-            Box->Orient = Normalize(Box->Orient * Diff);
-        }
+            v3 Dim = v3{1.9f, 0.9f, 0.9f};
+            v3 HalfDim = Dim*0.5f;
 
+            bool Selected = (BoxArrayIndex == State.SelectedBoxArray && BoxIndex == Array->Selected);
+            Box->tFlyToMouse += Selected ? DeltaTime : -DeltaTime;
+            Box->tFlyToMouse = Clamp01(Box->tFlyToMouse);
+            v3 FlyToP = HitTest.RayOrigin + HitTest.RayDir*2.5f;
+            Box->P = Lerp(Box->P, SmoothCurve01(Box->tFlyToMouse), FlyToP);
 
-        if(RayHit || Selected)
-        {
-            // NOTE(robin): Rotate to face forwards on mouse-over
-            Box->tSmooth += DeltaTime*2.0f;
-            v3 RotUp = {0,1,0};//v3 CamUp = {Camera->Y.y, Camera->Y.z, Camera->Y.x};
-            quaternion RotationTarget = QuaternionLookAt(Normalize(P - Camera->P), RotUp);
-            Box->Orient = LerpShortestPath(Box->Orient, Box->tSmooth*4.0f*DeltaTime, RotationTarget);
-        }
-        else
-        {
-            Box->tSmooth -= DeltaTime*2.0f;
-        }
-        Box->tSmooth = Clamp01(Box->tSmooth);
-
-
-        if(RayHit && !Selected)
-        {
-            if(HitTest.LastHitDistance < ClosestDistance)
+            if(BoxIndex)
             {
-                ClosestDistance = HitTest.LastHitDistance;
-                ClosestIndex = i;
+                v3 P0toP1 = PrevP - Box->P;
+                f32 Len = Length(P0toP1);
+                v3 Dir = P0toP1 / Len;
+                //m3x4 LineTransform = Translation(P) * MatrixAsColumns3x4(X, Y, Z) * Translation(0,0,HalfLen) * Scaling(0.05f,0.05f,HalfLen);
+                v3 LineP = Box->P + P0toP1*0.5f;
+                v3 LineDim = {0.1f, 0.1f, Len};
+                PushBox(&Renderer->Boxes, LineP, LineDim, QuaternionLookAt(Dir, Up));
+            }
+            PrevP = Box->P;
+
+            // TODO(robin) Symbolically solve
+            m3x4 InverseBoxTransform = Scaling(1.0f/HalfDim) * QuaternionRotationMatrix(Conjugate(Box->Orient)) * Translation(-Box->P);
+            bool RayHit = RaycastBox(&HitTest, InverseBoxTransform);
+
+            v3 AngleDiff = {RandomBilateral(&Random),
+                RandomBilateral(&Random),
+                RandomBilateral(&Random)};
+
+            if(!Selected)
+            {
+                // NOTE(robin): Idle rotation
+                AngleDiff = AngleDiff * 0.1f * DeltaTime * (1.0f - Box->tSmooth);
+                quaternion Diff = QuaternionFromAnglesN(AngleDiff);
+                Box->Orient = Normalize(Box->Orient * Diff);
+            }
+
+
+            if(RayHit || Selected)
+            {
+                // NOTE(robin): Rotate to face forwards on mouse-over
+                Box->tSmooth += DeltaTime*2.0f;
+                v3 RotUp = {0,1,0};//v3 CamUp = {Camera->Y.y, Camera->Y.z, Camera->Y.x};
+                quaternion RotationTarget = QuaternionLookAt(Normalize(Box->P - Camera->P), RotUp);
+                Box->Orient = LerpShortestPath(Box->Orient, Box->tSmooth*4.0f*DeltaTime, RotationTarget);
+            }
+            else
+            {
+                Box->tSmooth -= DeltaTime*2.0f;
+            }
+            Box->tSmooth = Clamp01(Box->tSmooth);
+
+
+            if(RayHit && !Selected)
+            {
+                if(HitTest.LastHitDistance < ClosestDistance)
+                {
+                    ClosestDistance = HitTest.LastHitDistance;
+                    ClosestIndex = BoxIndex;
+                    ClosestArrayIndex = BoxArrayIndex;
+                }
+            }
+
+            // TODO(robin) Symbolically solve
+            //m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
+            //m3x4 BoxTransform = UnscaledBoxTransform * Scaling(HalfDim);
+
+
+            f32 B = (0.5f*(1.0f + SineApproxN(V)));
+            f32 R = (0.5f*(1.0f + SineApproxN(V + 1.0f/3.0f)));
+            f32 G = (0.5f*(1.0f + SineApproxN(V + 2.0f/3.0f)));
+            //u32 C = RandomSolidColor(&Random);
+            u32 C = Pack01RGBA255(R,G,B);
+            //PushBox(&State.Default, P, Dim, Box->Orient, C,C,C,C,C,C);
+            //PushBox(&State.Default, BoxTransform, C,C,C,C,C,C);
+            PushBox(&Renderer->Boxes, Box->P, Dim, Box->Orient, C);
+
+
+            f32 CameraDistance = Length(Camera->P - Box->P);
+
+            if(CameraDistance < 50.0f)
+            {
+                f32 TextAlpha = 1.0f - SmoothStep(5.0f, CameraDistance, 15.0f);
+
+                m3x4 UnscaledBoxTransform = Translation(Box->P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
+                m3x4 MakeUpright = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
+                // TODO(robin) Symbolically solve
+                m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * MakeUpright;
+                char Buf[128];
+                string Text = FormatText(Buf, "%S\n%S\n%S", &Box->Name, &Box->Email, &Array->FavoriteFruit);
+
+                u32 Color = Pack01RGBA255(1,1,1, TextAlpha);
+                PushText(&Renderer->Text, Text, TextTransform, Color);
             }
         }
 
-        // TODO(robin) Symbolically solve
-        //m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
-        //m3x4 BoxTransform = UnscaledBoxTransform * Scaling(HalfDim);
 
-        f32 B = (0.5f*(1.0f + SineApproxN(V)));
-        f32 R = (0.5f*(1.0f + SineApproxN(V + 1.0f/3.0f)));
-        f32 G = (0.5f*(1.0f + SineApproxN(V + 2.0f/3.0f)));
-        //u32 C = RandomSolidColor(&Random);
-        u32 C = Pack01RGBA255(R,G,B);
-        //PushBox(&State.Default, P, Dim, Box->Orient, C,C,C,C,C,C);
-        //PushBox(&State.Default, BoxTransform, C,C,C,C,C,C);
-        PushBox(&State.Boxes, P, Dim, Box->Orient, C);
-
-
-        f32 CameraDistance = Length(Camera->P - P);
-#if 1
-        if(CameraDistance < 15.0f)
-        {
-            f32 TextAlpha = 1.0f - SmoothStep(5.0f, CameraDistance, 15.0f);
-
-            m3x4 UnscaledBoxTransform = Translation(P) * QuaternionRotationMatrix(Box->Orient);//XYZRotationN(Angles);
-            m3x4 MakeUpright = MatrixAsRows3x4(v3{1,0,0}, v3{0,0,1}, v3{0,1,0});
-            // TODO(robin) Symbolically solve
-            m3x4 TextTransform = UnscaledBoxTransform * Translation(-HalfDim.x, -HalfDim.y*1.002f, HalfDim.z) * MakeUpright;
-            char Buf[128];
-            string Text = FormatText(Buf, "Box #%u\n"
-                                          "x %f\n"
-                                          "y %f\n"
-                                          "z %f\n",
-                                          i, P.x, P.y, P.z);
-
-            u32 Color = Pack01RGBA255(1,1,1, TextAlpha);
-            PushText(&State.Text, Text, TextTransform, Color);
-        }
-#endif
+        RelBoxIndex += Array->Count;
     }
-
 
     if(MouseLeft->HalfTransitionCount && MouseLeft->EndedDown)
     {
         MouseLeft->HalfTransitionCount = 0;
-        State.SelectedBoxIndex = ClosestIndex;
+        State.SelectedBoxArray = ClosestArrayIndex;
+        State.BoxArrays[State.SelectedBoxArray].Selected = ClosestIndex;
     }
+    
 
     //m3x4 PlanetTransform = Translation(OrbitCenter) * Scaling(Minimum(Radius*0.1f, 10.0f)) * ZRotationN(Anim[4]);// * Scaling(10.0f);
     //m3x4 InvObjectTransform = ZRotationN(-0.6f) * Scaling(1.0f/10, 1.0f/9, 1.0f/9) * Translation(-5, 0, 0);
@@ -407,38 +437,41 @@ export_to_js void UpdateAndRender(u32 Width, u32 Height, f32 DeltaTime)
     //PushBox(Translation(MouseWorldP)*Scaling(0.05f));
 
 
-    Flush(&State.Boxes);
-    //Flush(&State.Default.Common);
-    Flush(&State.Text.Common);
+    Flush(&Renderer->Boxes);
+    Flush(&Renderer->Text);
 
+    glUseProgram(Renderer->Text.Program);
     m4x4 HUDProj = HUDProjection(Width, Height);
-    glUseProgram(State.Text.Common.Program);
-    glUniformMatrix4fv(State.Text.Common.Transform, true, &HUDProj);
+    glUniformMatrix4fv(Renderer->Text.Transform, true, &HUDProj);
 
-    char Buf[32];
-    string HudText = FormatText(Buf, "%f fps (%f ms)", 1.0f / DeltaTime, DeltaTime*1000.0f);
-    PushText(&State.Text, HudText, Scaling(0.4f));
+    char Buf[48];
+    string HudText = FormatText(Buf, "%f fps (%f ms)\n"
+                                     "%u triangles",
+                                     1.0f / DeltaTime, DeltaTime*1000.0f,
+                                     LastFrameTriangleCount);
 
-    Flush(&State.Text.Common);
+    PushText(&Renderer->Text, HudText, Scaling(0.35f));
 
-    Reset(&State.FrameMemory);
+    Flush(&Renderer->Text);
 
-#if 0
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, State.Framebuffer);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, (GLint)Width, (GLint)Height,
-                      0, 0, (GLint)Width, (GLint)Height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
-#else
+    glUseProgram(Renderer->Mesh.Program);
+    glUniformMatrix4fv(Renderer->Mesh.ViewTransform, true, &RenderTransform.Forward);
+    m4x4 ObjectTransform = To4x4(Scaling(5.0f) * ZRotationN(Anim[1]));
+    glUniformMatrix4fv(Renderer->Mesh.ObjectTransform, true, &ObjectTransform);
+    glUniform3f(Renderer->Mesh.MouseWorldP, HitTest.RayOrigin + HitTest.RayDir*7.5f);
+    glBindVertexArray(Renderer->Mesh.VertexArray);
+    glDrawElements(GL_TRIANGLES, Renderer->Mesh.IndexCount, GL_UNSIGNED_SHORT, 0);
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glUseProgram(State.PostProcessing.Program);
+    glUseProgram(Renderer->PostProcessing.Program);
     glActiveTexture(GL_TEXTURE0+1);
-    glBindTexture(GL_TEXTURE_2D, State.FramebufferColorTexture);
-    glUniform1i(State.PostProcessing.FramebufferSampler, 1);
-    glBindVertexArray(State.PostProcessing.VertexArray);
+    glBindTexture(GL_TEXTURE_2D, Renderer->FramebufferColorTexture);
+    glUniform1i(Renderer->PostProcessing.FramebufferSampler, 1);
+    glBindVertexArray(Renderer->PostProcessing.VertexArray);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glActiveTexture(GL_TEXTURE0);
-#endif
+
+    Reset(&State.FrameMemory);
 }
 
 

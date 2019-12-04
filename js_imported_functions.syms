@@ -2,6 +2,8 @@ JS_Log
 JS_Abort
 JS_GL_CreateCompileAndLinkProgram
 JS_GetFontAtlas
+JS_GetBusMeshSize
+JS_GetBusMesh
 
 glEnable
 glDisable

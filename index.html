@@ -2,19 +2,22 @@
 <html>
 <head>
     <meta charset="UTF-8">
-
+    <link rel="preload" href="generated.json" as="fetch" crossorigin="anonymous">
+    <link rel="preload" href="bus.bin" as="fetch" crossorigin="anonymous">
     <link rel="preload" href="main.js" as="script">
     <link rel="preload" href="main.wasm" as="fetch" crossorigin="anonymous">
     <link rel="preload" href="font_atlas_signed_distance_field.geom" as="fetch" crossorigin="anonymous">
     <link rel="preload" href="font_atlas_signed_distance_field.png" as="image">
     <link rel="icon" href="data:,">
-
 </head>
 
 <style> body{ margin: 0; overflow: hidden; font-family: monospace;} </style>
 
 <canvas id="canvas_webgl"></canvas>
 
+<script src="https://www.gstatic.com/firebasejs/7.5.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/7.5.0/firebase-firestore.js"></script>
+<script type="text/javascript" src="firebaseconfig.js"></script>
 <script type="text/javascript" src="main.js"></script>
 
 </html>

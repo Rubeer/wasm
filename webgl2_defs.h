@@ -65,7 +65,9 @@
 #define GL_FRAMEBUFFER                    0x8D40
 #define GL_COLOR_ATTACHMENT0              0x8CE0
 #define GL_DEPTH_ATTACHMENT               0x8D00
+#define GL_RGB                            0x1907
 #define GL_RGBA                           0x1908
+#define GL_RGB32F                         0x8815
 #define GL_RGBA32F                        0x8814
 #define GL_READ_FRAMEBUFFER               0x8CA8
 #define GL_DRAW_FRAMEBUFFER               0x8CA9

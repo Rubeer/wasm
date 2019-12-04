@@ -23,6 +23,23 @@ function void MemoryCopy(void *Dest, void const *Source, size Size)
     }
 }
 
+function bool AreEqual(buffer A, buffer B)
+{
+    if(A.Size != B.Size)
+    {
+        return false;
+    }
+
+    for(size i = 0; i < A.Size; ++i)
+    {
+        if(A.Contents[i] != B.Contents[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 // NOTE(robin): LLVM needs this..
 extern "C" void *memset(void *Dest, int ValueInit, size Size)
 {
@@ -62,6 +79,25 @@ function bool IsPowerOfTwo(u32 V)
 {
 	return ((V - 1) & V) == 0;
 }
+
+#define ReadType(Buffer, Type) (Type *)Read(Buffer, sizeof(Type))
+function char *Read(buffer *Buffer, u32 Size = 1)
+{
+    char *Result = 0;
+    if(Size <= Buffer->Size)
+    {
+        Result = Buffer->Contents;
+        Buffer->Contents += Size;
+        Buffer->Size -= Size;
+    }
+    else
+    {
+        Buffer->Contents = 0;
+        Buffer->Size = 0;
+    }
+    return Result;
+}
+
 
 function void Advance(string *String, size Count = 1)
 {
@@ -361,7 +397,7 @@ function void *PushSize(memory_arena *Memory, size RequestedSize, arena_push_fla
 
         __builtin_wasm_memory_grow(0, PagesAllocated); // NOTE(robin): This is really slow!
 
-        Memory->Buffer.Size += PagesAllocated * WASM_PAGE_SIZE;
+        Memory->Buffer.Size += PagesAllocated*WASM_PAGE_SIZE;
         Assert(Memory->Buffer.Size == GetHeapSize());
     }
 

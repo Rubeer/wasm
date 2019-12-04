@@ -12,7 +12,6 @@ enum : u32
 struct vertex
 {
     v3 P;
-    v3 N;
     v2 UV;
     u32 C;
 };
@@ -48,26 +47,6 @@ struct font_atlas_char
     float Advance;
 };
 
-struct renderer_common
-{
-    GLuint Program;
-    GLuint Transform;
-
-    GLuint VertexArray;
-
-    GLuint VertexBuffer;
-    GLuint IndexBuffer;
-
-    u32 VertexCount;
-    u32 MaxVertexCount;
-    u32 IndexCount;
-    u32 MaxIndexCount;
-
-    vertex *Vertices;
-    u16 *Indices;
-};
-
-
 struct box_vertex
 {
     v3 P;
@@ -97,22 +76,57 @@ struct renderer_boxes
     u32 InstanceCount;
     GLuint InstanceVertexBuffer;
     box_instance *InstanceData;
+
+    u32 TrianglesRendered;
 };
 
 
 struct renderer_text
 {
-    renderer_common Common;
+    GLuint Program;
+    GLuint Transform;
+
+    GLuint VertexArray;
+
+    GLuint VertexBuffer;
+    GLuint IndexBuffer;
+
+    u32 VertexCount;
+    u32 MaxVertexCount;
+    u32 IndexCount;
+    u32 MaxIndexCount;
+
+    vertex *Vertices;
+    u16 *Indices;
 
     GLuint Texture;
     GLuint TextureSampler;
     font_atlas_char Geometry[256];
+
+    u32 TrianglesRendered;
 };
 
-struct renderer_default
+struct mesh_vertex
 {
-    renderer_common Common;
+    v3 P;
+    v3 N;
+    u32 C;
+};
+
+
+struct renderer_mesh
+{
+    GLuint Program;
+    GLuint ViewTransform;
+    GLuint ObjectTransform; // TODO(robin): Instancing
     GLuint MouseWorldP;
+
+    GLuint VertexArray;
+    GLuint VertexBuffer;
+    GLuint IndexBuffer;
+
+    u32 VertexCount;
+    u32 IndexCount;
 };
 
 struct renderer_postprocessing
@@ -121,4 +135,18 @@ struct renderer_postprocessing
     GLuint FramebufferSampler;
     GLuint VertexArray;
     GLuint RectangleBuffer;
+};
+
+struct renderer
+{
+    renderer_boxes Boxes;
+    renderer_text Text;
+    renderer_mesh Mesh;
+    renderer_postprocessing PostProcessing;
+
+    GLuint FramebufferColorTexture;
+    GLuint FramebufferDepthTexture;
+    GLuint Framebuffer;
+    u32 LastWidth;
+    u32 LastHeight;
 };

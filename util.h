@@ -62,15 +62,15 @@ typedef buffer string;
 #define NotImplemented Abort("Not implemented!")
 
 import_from_js void JS_Log(size StringLength, void *StringPtr);
+function void JS_Log(string String)
+{
+    JS_Log(String.Size, String.Contents);
+}
+
 import_from_js void JS_Abort(size ReasonLength, void *ReasonPtr, size FileNameLength, void *FileNamePtr, size FuncNameSize, void *FuncNamePtr, u32 LineNumber);
 function void JS_Abort(string Reason, string File, string Func, u32 LineNumber)
 {
     JS_Abort(Reason.Size, Reason.Contents, File.Size, File.Contents, Func.Size, Func.Contents, LineNumber);
-}
-
-function void JS_Log(string String)
-{
-    JS_Log(String.Size, String.Contents);
 }
 
 function f64 AbsoluteValue(f64 V) { return __builtin_fabs(V); };

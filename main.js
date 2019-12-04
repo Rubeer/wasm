@@ -1,4 +1,13 @@
 
+firebase.initializeApp(firebaseConfig);
+const pir = firebase.firestore().collection('pir').limit(50).onSnapshot((snapshot) =>
+{
+    snapshot.docChanges().forEach(change => {
+        console.log(change.doc.data());
+    });
+});
+
+
 const Imports = {};
 
 //const MemoryPageCount = 2048;
@@ -6,6 +15,7 @@ const Imports = {};
 //Imports.memory = new WebAssembly.Memory({initial:MemoryPageCount});
 //let WasmMemory = null;//new Uint8Array(Imports.memory.buffer);
 let WasmMemory = null;
+let WasmExports = null;
 const GLObjects = new Array();
 GLObjects.push(null);
 const ASCIIDecoder = new TextDecoder("ascii");
@@ -30,14 +40,22 @@ async function LoadImageAsRawPixels(FileName)
     return Data;
 }
 
+let Program = fetch("main.wasm");
+let BusMesh = fetch("bus.bin").then(data => data.arrayBuffer());
 let FontAtlasPixels = LoadImageAsRawPixels("font_atlas_signed_distance_field.png");
 let FontAtlasGeom = fetch("font_atlas_signed_distance_field.geom").then(data => data.arrayBuffer());
-let Program = fetch("main.wasm");
+
+let TestData = null;
+async function GetTestDataFromJson(path)
+{
+    TestData = await fetch(path).then(data => data.json());
+}
+GetTestDataFromJson("generated.json");
 
 const gl = document.getElementById("canvas_webgl")
            .getContext("webgl2",
 { 
-  alpha: true, 
+  alpha: false, 
   antialias: false, 
   depth: true, 
   failIfMajorPerformanceCaveat: false, 
@@ -64,11 +82,22 @@ gl.getExtension("EXT_float_blend");
 
 function GetWasmString(Length, Pointer)
 {
-    const Data = new Uint8Array(WasmMemory.buffer, Pointer, Length).slice();
+    const Data = new Uint8Array(WasmMemory.buffer, Pointer, Length);
     const Str = ASCIIDecoder.decode(Data);
     //console.log(Pointer);
     //console.log("Str: " + Str);
     return Str;
+}
+
+function AddJSStringToWasm(Str)
+{
+    const Ptr = WasmExports.AllocatePermanent(Str.length);
+    const Dest = new Uint8Array(WasmMemory.buffer, Ptr, Str.length);
+    for(let i = 0; i < Str.length; ++i)
+    {
+        Dest[i] = Str.charCodeAt(i);
+    }
+    return Ptr;
 }
 
 function PushGLObj(Obj)
@@ -258,6 +287,14 @@ Imports.JS_GetFontAtlas = function(PixelsPtr, PixelsSize, GeomPtr, GeomSize)
     new Uint8Array(WasmMemory.buffer, GeomPtr, GeomSize).set(new Uint8Array(FontAtlasGeom));
 }
 
+Imports.JS_GetBusMeshSize = function()
+{
+    return BusMesh.byteLength;
+}
+Imports.JS_GetBusMesh = function(Ptr)
+{
+    new Uint8Array(WasmMemory.buffer, Ptr, BusMesh.byteLength).set(new Uint8Array(BusMesh));
+}
 
 async function Init()
 {
@@ -265,9 +302,10 @@ async function Init()
 
     FontAtlasGeom = await FontAtlasGeom;
     FontAtlasPixels = await FontAtlasPixels;
+    BusMesh = await BusMesh;
     Program = await Program;
 
-    const WasmExports = Program.instance.exports;
+    WasmExports = Program.instance.exports;
     WasmMemory = WasmExports.memory;
     console.log(WasmExports);
     WasmExports.Init();
@@ -331,12 +369,32 @@ async function Init()
         WasmExports.KeyPress(Event.keyCode, false);
     });
 
+    let TestDataIndex = 0;
     let PrevTime = null;
     function RenderLoop(Now)
     {
         window.requestAnimationFrame(RenderLoop);
+
+        if(TestData)
+        {
+            for(let i = 0; i < 128; ++i)
+            {
+                if(TestDataIndex < TestData.length/128)
+                {
+                    const Data = TestData[TestDataIndex++];
+                    const Name = AddJSStringToWasm(Data.name);
+                    const Email = AddJSStringToWasm(Data.email);
+                    const Fruit = AddJSStringToWasm(Data.favoriteFruit);
+                    WasmExports.AddTestData(Data.name.length, Name,
+                                            Data.email.length, Email,
+                                            Data.favoriteFruit.length, Fruit);
+                }
+            }
+        }
+        
         const DeltaTime = PrevTime ? (Now - PrevTime) : (1000.0/60.0);
         PrevTime = Now;
+
         WasmExports.UpdateAndRender(gl.canvas.width, gl.canvas.height, DeltaTime*0.001);
     }
 
